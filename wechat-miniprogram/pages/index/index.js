@@ -1,0 +1,176 @@
+// 导入配置数据
+const { scenarios, festivals, targetPersons, styles } = require('../../utils/config.js');
+// 导入 API 调用函数
+const { generateBlessing } = require('../../utils/api-client.js');
+
+Page({
+  data: {
+    // 表单数据
+    formData: {
+      scenario: '',
+      festival: '',
+      targetPerson: '',
+      style: '温馨',
+      customDescription: '',
+      useSmartMode: false
+    },
+
+    // 状态管理
+    blessing: '',           // 生成的祝福语内容
+    loading: false,         // 加载状态
+    error: '',              // 错误信息
+    copySuccess: false,     // 复制成功状态
+    copyFading: false,      // 复制提示淡出动画状态
+
+    // 配置数据
+    scenarios: scenarios,
+    festivals: festivals,
+    targetPersons: targetPersons,
+    styles: styles
+  },
+
+  /**
+   * 切换输入模式
+   * 在两种模式之间切换，并清空相应的表单数据
+   * @param {Object} e - 事件对象
+   */
+  toggleMode(e) {
+    const useSmartMode = e.currentTarget.dataset.mode === 'smart';
+
+    this.setData({
+      'formData.useSmartMode': useSmartMode,
+      // 根据模式清空不同的字段
+      ...(useSmartMode ? {
+        'formData.scenario': '',
+        'formData.festival': '',
+        'formData.targetPerson': '',
+        'formData.style': '温馨'
+      } : {
+        'formData.customDescription': ''
+      }),
+      // 清空结果和错误
+      blessing: '',
+      error: ''
+    });
+  },
+
+  /**
+   * 处理表单输入变化
+   * @param {Object} e - 事件对象
+   */
+  onInputChange(e) {
+    const field = e.currentTarget.dataset.field;
+    const value = e.detail.value;
+
+    this.setData({
+      [`formData.${field}`]: value
+    });
+  },
+
+  /**
+   * 处理表单提交事件
+   * 接收用户输入，调用 API 生成祝福语
+   * @param {Object} e - 表单提交事件
+   */
+  onSubmit(e) {
+    // 阻止表单默认提交行为已在 WXML 中处理
+
+    // 基本验证
+    const { useSmartMode, customDescription, scenario, targetPerson } = this.data.formData;
+
+    if (useSmartMode && (!customDescription || !customDescription.trim())) {
+      this.setData({ error: '请提供祝福语描述' });
+      return;
+    }
+
+    if (!useSmartMode && (!scenario || !targetPerson)) {
+      this.setData({ error: '请选择场景和目标人群' });
+      return;
+    }
+
+    // 开始加载
+    this.setData({
+      loading: true,
+      error: '',
+      blessing: ''
+    });
+
+    // 调用 API 生成祝福语
+    generateBlessing(this.data.formData)
+      .then(result => {
+        this.setData({
+          blessing: result,
+          loading: false
+        });
+      })
+      .catch(err => {
+        this.setData({
+          error: err.message || '生成失败，请重试',
+          loading: false
+        });
+      });
+  },
+
+  /**
+   * 处理重新生成操作
+   * 使用相同参数重新调用 API 生成祝福语
+   */
+  onRegenerate() {
+    // 开始加载
+    this.setData({
+      loading: true,
+      error: ''
+    });
+
+    // 使用当前选项重新生成
+    generateBlessing(this.data.formData)
+      .then(result => {
+        this.setData({
+          blessing: result,
+          loading: false
+        });
+      })
+      .catch(err => {
+        this.setData({
+          error: err.message || '生成失败，请重试',
+          loading: false
+        });
+      });
+  },
+
+  /**
+   * 处理复制祝福语功能
+   * 将生成的祝福语复制到系统剪贴板，并显示成功提示
+   */
+  onCopy() {
+    const that = this;
+    wx.setClipboardData({
+      data: this.data.blessing,
+      success() {
+        that.setData({
+          copySuccess: true,
+          copyFading: false
+        });
+
+        // 2.5秒后开始淡出动画
+        setTimeout(() => {
+          that.setData({ copyFading: true });
+        }, 2500);
+
+        // 3秒后完全隐藏提示
+        setTimeout(() => {
+          that.setData({
+            copySuccess: false,
+            copyFading: false
+          });
+        }, 3000);
+      },
+      fail(err) {
+        console.error('复制失败:', err);
+        that.setData({
+          error: '复制失败，请手动选择文字复制'
+        });
+      }
+    });
+  }
+});

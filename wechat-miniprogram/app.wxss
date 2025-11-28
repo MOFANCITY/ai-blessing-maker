@@ -1,0 +1,174 @@
+/* 全局样式文件 */
+
+/* 重置样式 */
+page {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  min-height: 100vh;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+}
+
+/* 通用工具类 */
+.text-center {
+  text-align: center;
+}
+
+.mb-6 {
+  margin-bottom: 30rpx;
+}
+
+/* 按钮基础样式 */
+button {
+  border-radius: 10rpx;
+  border: none;
+  outline: none;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+button:active {
+  transform: scale(0.98);
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* 文本样式 */
+.festive-title {
+  font-weight: 800;
+  background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* 卡片样式 */
+.card-primary {
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 20rpx;
+  padding: 30rpx;
+  margin-bottom: 30rpx;
+  box-shadow: 0 10rpx 30rpx rgba(0, 0, 0, 0.1);
+  position: relative;
+  overflow: hidden;
+}
+
+.card-secondary {
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 20rpx;
+  padding: 30rpx;
+  box-shadow: 0 10rpx 30rpx rgba(0, 255, 255, 0.1);
+  position: relative;
+}
+
+/* 装饰元素 */
+.decoration-tr {
+  position: absolute;
+  top: -20rpx;
+  right: -20rpx;
+  width: 100rpx;
+  height: 100rpx;
+  background: linear-gradient(45deg, #ffd700, #ffa500);
+  border-radius: 50%;
+  opacity: 0.3;
+}
+
+/* 模式按钮样式 */
+.btn-mode {
+  padding: 20rpx 30rpx;
+  border: none;
+  border-radius: 50rpx;
+  font-size: 28rpx;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  min-width: 200rpx;
+  box-shadow: 0 4rpx 15rpx rgba(0, 0, 0, 0.1);
+}
+
+.btn-mode-inactive {
+  background: #f0f0f0;
+  color: #666;
+}
+
+.btn-mode-active {
+  color: white;
+  transform: scale(1.05);
+  box-shadow: 0 8rpx 25rpx rgba(0, 0, 0, 0.2);
+}
+
+/* 生成按钮样式 */
+.btn-generate {
+  width: 100%;
+  padding: 30rpx;
+  border: none;
+  border-radius: 50rpx;
+  font-size: 32rpx;
+  font-weight: bold;
+  color: white;
+  background: linear-gradient(45deg, #667eea, #764ba2);
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 10rpx 30rpx rgba(0, 0, 0, 0.2);
+  transition: all 0.3s ease;
+}
+
+.btn-generate:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-generate:not(:disabled):hover {
+  transform: translateY(-2rpx);
+  box-shadow: 0 15rpx 35rpx rgba(0, 0, 0, 0.3);
+}
+
+/* 加载动画 */
+.loading-spinner {
+  width: 40rpx;
+  height: 40rpx;
+  border: 4rpx solid rgba(255, 255, 255, 0.3);
+  border-top: 4rpx solid white;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .container {
+    padding: 20rpx 10rpx;
+  }
+
+  .card-primary,
+  .card-secondary {
+    padding: 20rpx;
+    margin-bottom: 20rpx;
+  }
+
+  .mode-buttons {
+    gap: 10rpx;
+  }
+
+  .btn-mode {
+    padding: 15rpx 20rpx;
+    font-size: 24rpx;
+    min-width: 150rpx;
+  }
+
+  .result-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .result-actions {
+    justify-content: center;
+  }
+}

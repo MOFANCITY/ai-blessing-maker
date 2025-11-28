@@ -1,0 +1,177 @@
+<!-- 无障碍支持：屏幕阅读器状态通知区域 -->
+<view aria-live="polite" aria-atomic="true" class="sr-only">
+  <block wx:if="{{loading}}">正在生成祝福语，请稍候...</block>
+  <block wx:elif="{{error}}">错误：{{error}}</block>
+  <block wx:elif="{{copySuccess}}">祝福语已成功复制到剪贴板</block>
+  <block wx:elif="{{blessing && !loading && !error}}">祝福语生成完成</block>
+</view>
+
+<!-- 主内容区域：响应式两列布局 -->
+<view class="container">
+  <!-- 左侧：表单输入区域 -->
+  <view class="form-section card-primary">
+    <!-- 装饰元素 -->
+    <view class="decoration-tr"></view>
+
+    <!-- 模式选择 -->
+    <view class="mode-selector text-center mb-6">
+      <view class="title festive-title">
+        <text decode="{{true}}">🤖 智能祝福生成器 ✨</text>
+      </view>
+
+      <view class="mode-buttons">
+        <button
+          class="btn-mode {{!formData.useSmartMode ? 'btn-mode-active from-red-500 to-orange-500' : 'btn-mode-inactive'}}"
+          bindtap="toggleMode"
+          data-mode="template"
+        >
+          🎯 快速模板
+        </button>
+        <button
+          class="btn-mode {{formData.useSmartMode ? 'btn-mode-active from-blue-500 to-purple-500' : 'btn-mode-inactive'}}"
+          bindtap="toggleMode"
+          data-mode="smart"
+        >
+          💬 智能描述
+        </button>
+      </view>
+    </view>
+
+    <form bindsubmit="onSubmit" class="form-content">
+      <!-- 智能模式表单 -->
+      <view wx:if="{{formData.useSmartMode}}" class="mode-content">
+        <view class="input-group">
+          <label class="input-label">请输入祝福语描述</label>
+          <textarea
+            class="textarea-input"
+            placeholder="例如：明天是我最好的朋友小明的生日，他最近工作很辛苦，想给他一个温暖的生日祝福..."
+            value="{{formData.customDescription}}"
+            bindinput="onInputChange"
+            data-field="customDescription"
+            maxlength="300"
+          ></textarea>
+          <view class="char-count">{{formData.customDescription.length}}/300</view>
+        </view>
+      </view>
+
+      <!-- 经典模板模式表单 -->
+      <view wx:else class="mode-content">
+        <view class="input-group">
+          <label class="input-label">祝福场景 *</label>
+          <picker
+            mode="selector"
+            range="{{scenarios}}"
+            range-key="label"
+            value="{{scenarioIndex}}"
+            bindchange="onScenarioChange"
+          >
+            <view class="picker-input {{formData.scenario ? '' : 'placeholder'}}">
+              {{formData.scenario ? formData.scenario : '请选择祝福场景'}}
+            </view>
+          </picker>
+        </view>
+
+        <view class="input-group">
+          <label class="input-label">节日类型</label>
+          <picker
+            mode="selector"
+            range="{{festivals}}"
+            range-key="label"
+            value="{{festivalIndex}}"
+            bindchange="onFestivalChange"
+          >
+            <view class="picker-input {{formData.festival ? '' : 'placeholder'}}">
+              {{formData.festival ? formData.festival : '无特定节日'}}
+            </view>
+          </picker>
+        </view>
+
+        <view class="input-group">
+          <label class="input-label">目标人群 *</label>
+          <picker
+            mode="selector"
+            range="{{targetPersons}}"
+            range-key="label"
+            value="{{targetPersonIndex}}"
+            bindchange="onTargetPersonChange"
+          >
+            <view class="picker-input {{formData.targetPerson ? '' : 'placeholder'}}">
+              {{formData.targetPerson ? formData.targetPerson : '请选择目标人群'}}
+            </view>
+          </picker>
+        </view>
+
+        <view class="input-group">
+          <label class="input-label">祝福风格</label>
+          <picker
+            mode="selector"
+            range="{{styles}}"
+            range-key="label"
+            value="{{styleIndex}}"
+            bindchange="onStyleChange"
+          >
+            <view class="picker-input">
+              {{formData.style ? formData.style : '温馨亲切'}}
+            </view>
+          </picker>
+        </view>
+      </view>
+
+      <!-- 生成按钮 -->
+      <view class="generate-button-container">
+        <button
+          class="btn-generate {{loading ? 'loading' : ''}}"
+          form-type="submit"
+          disabled="{{loading || (!formData.useSmartMode && (!formData.scenario || !formData.targetPerson)) || (formData.useSmartMode && (!formData.customDescription || !formData.customDescription.trim()))}}"
+        >
+          <view class="button-content">
+            <block wx:if="{{loading}}">
+              <view class="loading-spinner"></view>
+              <text>{{formData.useSmartMode ? '🧠 AI思考中...' : '🎊 生成中，请稍候...'}}</text>
+            </block>
+            <block wx:else>
+              <text>{{formData.useSmartMode ? '🧠 智能生成' : '✨ 快速生成'}}</text>
+            </block>
+          </view>
+        </button>
+      </view>
+    </form>
+  </view>
+
+  <!-- 右侧：结果展示区域 -->
+  <view class="result-section">
+    <view wx:if="{{error}}" class="error-container">
+      <view class="error-message">
+        ❌ {{error}}
+      </view>
+    </view>
+
+    <view wx:elif="{{blessing}}" class="result-container card-secondary">
+      <view class="result-header">
+        <text class="result-title">🎉 生成的祝福语</text>
+        <view class="result-actions">
+          <button class="action-btn" bindtap="onCopy">
+            <text decode="{{true}}">📋 复制</text>
+          </button>
+          <button class="action-btn" bindtap="onRegenerate">
+            <text decode="{{true}}">🔄 重新生成</text>
+          </button>
+        </view>
+      </view>
+
+      <view class="blessing-content">
+        {{blessing}}
+      </view>
+
+      <!-- 复制成功提示 -->
+      <view wx:if="{{copySuccess}}" class="copy-success {{copyFading ? 'fade-out' : ''}}">
+        ✅ 已复制到剪贴板！
+      </view>
+    </view>
+
+    <view wx:else class="empty-state">
+      <view class="empty-icon">🙏</view>
+      <view class="empty-text">请输入相关信息生成祝福语</view>
+    </view>
+  </view>
+</view>

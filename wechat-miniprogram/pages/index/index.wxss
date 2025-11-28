@@ -1,0 +1,368 @@
+/* 页面容器 */
+.container {
+  padding: 20rpx;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+/* 卡片样式 */
+.card-primary {
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 20rpx;
+  padding: 30rpx;
+  margin-bottom: 30rpx;
+  box-shadow: 0 10rpx 30rpx rgba(0, 0, 0, 0.1);
+  position: relative;
+  overflow: hidden;
+}
+
+.card-secondary {
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 20rpx;
+  padding: 30rpx;
+  box-shadow: 0 10rpx 30rpx rgba(0, 255, 255, 0.1);
+  position: relative;
+}
+
+/* 装饰元素 */
+.decoration-tr {
+  position: absolute;
+  top: -20rpx;
+  right: -20rpx;
+  width: 100rpx;
+  height: 100rpx;
+  background: linear-gradient(45deg, #ffd700, #ffa500);
+  border-radius: 50%;
+  opacity: 0.3;
+}
+
+/* 标题样式 */
+.title {
+  font-size: 36rpx;
+  font-weight: bold;
+  margin-bottom: 30rpx;
+  color: #333;
+}
+
+.festive-title {
+  background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* 模式选择器 */
+.mode-selector {
+  margin-bottom: 40rpx;
+}
+
+.mode-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 20rpx;
+  flex-wrap: wrap;
+}
+
+.btn-mode {
+  padding: 20rpx 30rpx;
+  border: none;
+  border-radius: 50rpx;
+  font-size: 28rpx;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  min-width: 200rpx;
+  box-shadow: 0 4rpx 15rpx rgba(0, 0, 0, 0.1);
+}
+
+.btn-mode-inactive {
+  background: #f0f0f0;
+  color: #666;
+}
+
+.btn-mode-active {
+  color: white;
+  transform: scale(1.05);
+  box-shadow: 0 8rpx 25rpx rgba(0, 0, 0, 0.2);
+}
+
+.from-red-500 {
+  background: linear-gradient(to right, #ef4444, #f97316);
+}
+
+.from-blue-500 {
+  background: linear-gradient(to right, #3b82f6, #8b5cf6);
+}
+
+/* 表单内容 */
+.form-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.mode-content {
+  flex: 1;
+}
+
+/* 输入组 */
+.input-group {
+  margin-bottom: 30rpx;
+}
+
+.input-label {
+  display: block;
+  font-size: 28rpx;
+  font-weight: bold;
+  margin-bottom: 15rpx;
+  color: #333;
+}
+
+.textarea-input {
+  width: 100%;
+  height: 200rpx;
+  padding: 20rpx;
+  border: 2rpx solid #ddd;
+  border-radius: 15rpx;
+  font-size: 28rpx;
+  background: white;
+  box-sizing: border-box;
+}
+
+.textarea-input:focus {
+  border-color: #667eea;
+  outline: none;
+}
+
+.picker-input {
+  width: 100%;
+  padding: 20rpx;
+  border: 2rpx solid #ddd;
+  border-radius: 15rpx;
+  font-size: 28rpx;
+  background: white;
+  box-sizing: border-box;
+}
+
+.picker-input.placeholder {
+  color: #999;
+}
+
+.char-count {
+  text-align: right;
+  font-size: 24rpx;
+  color: #666;
+  margin-top: 10rpx;
+}
+
+/* 生成按钮容器 */
+.generate-button-container {
+  margin-top: auto;
+  padding-top: 30rpx;
+}
+
+.btn-generate {
+  width: 100%;
+  padding: 30rpx;
+  border: none;
+  border-radius: 50rpx;
+  font-size: 32rpx;
+  font-weight: bold;
+  color: white;
+  background: linear-gradient(45deg, #667eea, #764ba2);
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 10rpx 30rpx rgba(0, 0, 0, 0.2);
+  transition: all 0.3s ease;
+}
+
+.btn-generate:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-generate:not(:disabled):hover {
+  transform: translateY(-2rpx);
+  box-shadow: 0 15rpx 35rpx rgba(0, 0, 0, 0.3);
+}
+
+.button-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 15rpx;
+}
+
+/* 加载动画 */
+.loading-spinner {
+  width: 40rpx;
+  height: 40rpx;
+  border: 4rpx solid rgba(255, 255, 255, 0.3);
+  border-top: 4rpx solid white;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* 结果区域 */
+.result-section {
+  margin-top: 30rpx;
+}
+
+.error-container {
+  background: #fee;
+  border: 2rpx solid #fcc;
+  border-radius: 15rpx;
+  padding: 30rpx;
+  text-align: center;
+}
+
+.error-message {
+  color: #c33;
+  font-size: 28rpx;
+}
+
+.result-container {
+  animation: fadeIn 0.5s ease-in;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(20rpx); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.result-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30rpx;
+  flex-wrap: wrap;
+  gap: 20rpx;
+}
+
+.result-title {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #333;
+}
+
+.result-actions {
+  display: flex;
+  gap: 20rpx;
+}
+
+.action-btn {
+  padding: 15rpx 25rpx;
+  border: 2rpx solid #667eea;
+  border-radius: 50rpx;
+  background: white;
+  color: #667eea;
+  font-size: 24rpx;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.action-btn:active {
+  background: #667eea;
+  color: white;
+  transform: scale(0.95);
+}
+
+.blessing-content {
+  font-size: 32rpx;
+  line-height: 1.6;
+  color: #333;
+  padding: 30rpx;
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  border-radius: 15rpx;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.copy-success {
+  margin-top: 20rpx;
+  padding: 20rpx;
+  background: #d4edda;
+  border: 2rpx solid #c3e6cb;
+  border-radius: 10rpx;
+  color: #155724;
+  text-align: center;
+  font-size: 28rpx;
+  animation: fadeIn 0.3s ease-in;
+}
+
+.copy-success.fade-out {
+  animation: fadeOut 0.5s ease-out forwards;
+}
+
+@keyframes fadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+.empty-state {
+  text-align: center;
+  padding: 80rpx 40rpx;
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 20rpx;
+}
+
+.empty-icon {
+  font-size: 80rpx;
+  margin-bottom: 30rpx;
+}
+
+.empty-text {
+  font-size: 32rpx;
+  color: #666;
+}
+
+/* 无障碍支持 */
+.sr-only {
+  position: absolute;
+  width: 1rpx;
+  height: 1rpx;
+  padding: 0;
+  margin: -1rpx;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .container {
+    padding: 20rpx 10rpx;
+  }
+
+  .card-primary,
+  .card-secondary {
+    padding: 20rpx;
+    margin-bottom: 20rpx;
+  }
+
+  .mode-buttons {
+    gap: 10rpx;
+  }
+
+  .btn-mode {
+    padding: 15rpx 20rpx;
+    font-size: 24rpx;
+    min-width: 150rpx;
+  }
+
+  .result-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .result-actions {
+    justify-content: center;
+  }
+}
