@@ -26,7 +26,13 @@ Page({
     scenarios: scenarios,
     festivals: festivals,
     targetPersons: targetPersons,
-    styles: styles
+    styles: styles,
+
+    // Picker索引
+    scenarioIndex: 0,
+    festivalIndex: 0,
+    targetPersonIndex: 0,
+    styleIndex: 0
   },
 
   /**
@@ -64,6 +70,62 @@ Page({
 
     this.setData({
       [`formData.${field}`]: value
+    });
+  },
+
+  /**
+   * 处理场景选择变化
+   * @param {Object} e - 事件对象
+   */
+  onScenarioChange(e) {
+    const selectedIndex = e.detail.value;
+    const selectedScenario = this.data.scenarios[selectedIndex];
+
+    this.setData({
+      'formData.scenario': selectedScenario.value,
+      scenarioIndex: selectedIndex
+    });
+  },
+
+  /**
+   * 处理节日选择变化
+   * @param {Object} e - 事件对象
+   */
+  onFestivalChange(e) {
+    const selectedIndex = e.detail.value;
+    const selectedFestival = this.data.festivals[selectedIndex];
+
+    this.setData({
+      'formData.festival': selectedFestival.value,
+      festivalIndex: selectedIndex
+    });
+  },
+
+  /**
+   * 处理目标人群选择变化
+   * @param {Object} e - 事件对象
+   */
+  onTargetPersonChange(e) {
+    const selectedIndex = e.detail.value;
+    const selectedTargetPerson = this.data.targetPersons[selectedIndex];
+
+    this.setData({
+      'formData.targetPerson': selectedTargetPerson.value,
+      targetPersonIndex: selectedIndex
+    });
+  },
+
+  /**
+   * 处理风格选择变化
+   * @param {Object} e - 事件对象
+   */
+  onStyleChange(e) {
+    const selectedIndex = e.detail.value;
+    const selectedStyle = this.data.styles[selectedIndex];
+
+    this.setData({
+      'formData.style': selectedStyle.value,
+      styleIndex: selectedIndex
     });
   },
 

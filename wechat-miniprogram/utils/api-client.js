@@ -1,3 +1,6 @@
+// 导入API配置
+const { API_URL } = require('./api-config.js');
+
 /**
  * 祝福语生成选项接口定义
  * 支持两种模式：经典模板模式和智能描述模式
@@ -13,7 +16,7 @@
 function generateBlessing(options) {
   return new Promise((resolve, reject) => {
     wx.request({
-      url: 'https://your-domain.com/api/blessing', // 需要替换为实际的API域名
+      url: API_URL,
       method: 'POST',
       header: {
         'Content-Type': 'application/json',

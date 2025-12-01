@@ -66,7 +66,7 @@
             bindchange="onScenarioChange"
           >
             <view class="picker-input {{formData.scenario ? '' : 'placeholder'}}">
-              {{formData.scenario ? formData.scenario : '请选择祝福场景'}}
+              {{formData.scenario ? scenarios[scenarioIndex].label : '请选择祝福场景'}}
             </view>
           </picker>
         </view>
@@ -81,7 +81,7 @@
             bindchange="onFestivalChange"
           >
             <view class="picker-input {{formData.festival ? '' : 'placeholder'}}">
-              {{formData.festival ? formData.festival : '无特定节日'}}
+              {{formData.festival ? festivals[festivalIndex].label : '无特定节日'}}
             </view>
           </picker>
         </view>
@@ -96,7 +96,7 @@
             bindchange="onTargetPersonChange"
           >
             <view class="picker-input {{formData.targetPerson ? '' : 'placeholder'}}">
-              {{formData.targetPerson ? formData.targetPerson : '请选择目标人群'}}
+              {{formData.targetPerson ? targetPersons[targetPersonIndex].label : '请选择目标人群'}}
             </view>
           </picker>
         </view>
@@ -111,7 +111,7 @@
             bindchange="onStyleChange"
           >
             <view class="picker-input">
-              {{formData.style ? formData.style : '温馨亲切'}}
+              {{formData.style ? styles[styleIndex].label : '温馨亲切'}}
             </view>
           </picker>
         </view>
