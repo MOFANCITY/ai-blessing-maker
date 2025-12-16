@@ -29,8 +29,8 @@ export default function ResultDisplay({
       <div className="decoration-tl"></div>
 
       <h2 className="text-2xl font-black text-center mb-6 festive-title">
-        <span aria-hidden="true">🎉</span> 生成结果{" "}
-        <span aria-hidden="true">🎉</span>
+        <span aria-hidden="true"></span> 生成结果{" "}
+        <span aria-hidden="true"></span>
       </h2>
 
       {error && <ErrorMessage message={error} />}
@@ -55,9 +55,9 @@ export default function ResultDisplay({
                 } max-w-md mx-auto relative z-20`}
               >
                 <div className="flex items-center justify-center gap-2">
-                  <span className="text-2xl">🎉</span>
+                  <span className="text-2xl"></span>
                   <span>祝福语已复制到剪贴板！快去分享这份温暖吧~</span>
-                  <span className="text-2xl">✨</span>
+                  <span className="text-2xl"></span>
                 </div>
               </div>
             )}

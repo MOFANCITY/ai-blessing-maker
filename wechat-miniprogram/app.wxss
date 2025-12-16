@@ -2,9 +2,9 @@
 
 /* 重置样式 */
 page {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #FFDAB9 0%, #F8F0E3 100%);
   min-height: 100vh;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  font-family: 'Source Han Sans SC', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'WenQuanYi Micro Hei', sans-serif;
 }
 
 /* 通用工具类 */
@@ -18,30 +18,65 @@ page {
 
 /* 按钮基础样式 */
 button {
-  border-radius: 10rpx;
+  border-radius: 12rpx;
   border: none;
   outline: none;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+  box-shadow: inset 0 2rpx 4rpx rgba(0, 0, 0, 0.1);
+}
+
+button::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  transition: width 0.6s ease, height 0.6s ease;
+  pointer-events: none;
+}
+
+button:active::before {
+  width: 300rpx;
+  height: 300rpx;
 }
 
 button:active {
-  transform: scale(0.98);
+  transform: scale(1.03);
+  transition-duration: 0.1s;
+  animation: buttonVibrate 0.3s ease-in-out;
+}
+
+@keyframes buttonVibrate {
+  0%, 100% { transform: scale(1.03) translateX(0); }
+  25% { transform: scale(1.03) translateX(-1rpx); }
+  75% { transform: scale(1.03) translateX(1rpx); }
 }
 
 button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
   transform: none;
+  box-shadow: inset 0 1rpx 2rpx rgba(0, 0, 0, 0.05);
+}
+
+button:disabled::before {
+  display: none;
 }
 
 /* 文本样式 */
 .festive-title {
-  font-weight: 800;
-  background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  font-family: 'Source Han Serif SC', 'KaiTi', '楷体', serif;
+  font-weight: normal;
+  color: #3D3D3D;
+  font-size: 20px;
+  text-shadow: 1rpx 1rpx 2rpx rgba(0, 0, 0, 0.1);
 }
 
 /* 卡片样式 */
@@ -50,17 +85,19 @@ button:disabled {
   border-radius: 20rpx;
   padding: 30rpx;
   margin-bottom: 30rpx;
-  box-shadow: 0 10rpx 30rpx rgba(0, 0, 0, 0.1);
+  box-shadow: 0 8rpx 25rpx rgba(0, 0, 0, 0.08), inset 0 1rpx 3rpx rgba(255, 255, 255, 0.5);
   position: relative;
   overflow: hidden;
+  border: 1rpx solid rgba(107, 142, 35, 0.1);
 }
 
 .card-secondary {
   background: rgba(255, 255, 255, 0.95);
   border-radius: 20rpx;
   padding: 30rpx;
-  box-shadow: 0 10rpx 30rpx rgba(0, 255, 255, 0.1);
+  box-shadow: 0 8rpx 25rpx rgba(0, 0, 0, 0.08), inset 0 1rpx 3rpx rgba(255, 255, 255, 0.5);
   position: relative;
+  border: 1rpx solid rgba(107, 142, 35, 0.1);
 }
 
 /* 装饰元素 */
@@ -70,9 +107,9 @@ button:disabled {
   right: -20rpx;
   width: 100rpx;
   height: 100rpx;
-  background: linear-gradient(45deg, #ffd700, #ffa500);
+  background: linear-gradient(45deg, #C79E6F, #A0522D);
   border-radius: 50%;
-  opacity: 0.3;
+  opacity: 0.2;
 }
 
 /* 模式按钮样式 */
@@ -85,18 +122,19 @@ button:disabled {
   cursor: pointer;
   transition: all 0.3s ease;
   min-width: 200rpx;
-  box-shadow: 0 4rpx 15rpx rgba(0, 0, 0, 0.1);
+  box-shadow: inset 0 2rpx 4rpx rgba(0, 0, 0, 0.1);
 }
 
 .btn-mode-inactive {
-  background: #f0f0f0;
-  color: #666;
+  background: rgba(248, 240, 227, 0.8);
+  color: #5A5A5A;
+  border: 1rpx solid rgba(107, 142, 35, 0.2);
 }
 
 .btn-mode-active {
   color: white;
   transform: scale(1.05);
-  box-shadow: 0 8rpx 25rpx rgba(0, 0, 0, 0.2);
+  box-shadow: 0 6rpx 20rpx rgba(0, 0, 0, 0.15), inset 0 1rpx 2rpx rgba(255, 255, 255, 0.2);
 }
 
 /* 生成按钮样式 */
@@ -108,22 +146,23 @@ button:disabled {
   font-size: 32rpx;
   font-weight: bold;
   color: white;
-  background: linear-gradient(45deg, #667eea, #764ba2);
+  background: linear-gradient(45deg, #6B8E23, #A0522D);
   cursor: pointer;
   position: relative;
   overflow: hidden;
-  box-shadow: 0 10rpx 30rpx rgba(0, 0, 0, 0.2);
+  box-shadow: 0 8rpx 25rpx rgba(0, 0, 0, 0.15), inset 0 2rpx 4rpx rgba(255, 255, 255, 0.1);
   transition: all 0.3s ease;
 }
 
 .btn-generate:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+  background: linear-gradient(45deg, #888, #666);
 }
 
-.btn-generate:not(:disabled):hover {
-  transform: translateY(-2rpx);
-  box-shadow: 0 15rpx 35rpx rgba(0, 0, 0, 0.3);
+.btn-generate:not(:disabled):active {
+  transform: scale(1.03);
+  animation: buttonVibrate 0.3s ease-in-out;
 }
 
 /* 加载动画 */

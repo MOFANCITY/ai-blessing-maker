@@ -30,7 +30,7 @@ export default function BlessingResult({
           className="btn-primary"
           aria-label="复制生成的祝福语到剪贴板"
         >
-          📋 复制祝福语
+          复制祝福语
         </button>
         <button
           onClick={onRegenerate}
@@ -38,7 +38,7 @@ export default function BlessingResult({
           className="btn-secondary disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none"
           aria-label="重新生成祝福语"
         >
-          🔄 重新生成
+          重新生成
         </button>
       </div>
     </div>

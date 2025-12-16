@@ -33,6 +33,7 @@ export default function BlessingForm({
   // 当前模式状态（智能模式 vs 经典模式）
   const [isSmartMode, setIsSmartMode] = useState(options.useSmartMode || false)
 
+
   /**
    * 切换输入模式
    * 在两种模式之间切换，并清空相应的表单数据
@@ -67,8 +68,8 @@ export default function BlessingForm({
       {/* 模式选择 */}
       <div className="text-center mb-6">
         <h2 className="text-2xl font-black mb-4 festive-title">
-          <span aria-hidden="true">🤖</span> 智能祝福生成器{" "}
-          <span aria-hidden="true">✨</span>
+          智能祝福生成器{" "}
+         
         </h2>
 
         <div className="inline-flex rounded-2xl bg-white/80 p-1 shadow-lg border border-yellow-300">
@@ -81,7 +82,7 @@ export default function BlessingForm({
                 : "btn-mode-inactive"
             }`}
           >
-            🎯 快速模板
+            快速模板
           </button>
           <button
             type="button"
@@ -92,7 +93,7 @@ export default function BlessingForm({
                 : "btn-mode-inactive"
             }`}
           >
-            💬 智能描述
+            智能描述
           </button>
         </div>
       </div>
@@ -146,10 +147,10 @@ export default function BlessingForm({
               {loading ? (
                 <>
                   <div className="loading-spinner"></div>
-                  {isSmartMode ? "🧠 AI思考中..." : "🎊 生成中，请稍候..."}
+                  {isSmartMode ? "AI思考中..." : "生成中，请稍候..."}
                 </>
               ) : (
-                <>{isSmartMode ? "🧠 智能生成" : "✨ 快速生成"}</>
+                <>{isSmartMode ? "智能生成" : "快速生成"}</>
               )}
             </div>
           </button>

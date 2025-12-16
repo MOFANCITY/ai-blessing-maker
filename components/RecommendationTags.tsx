@@ -27,9 +27,7 @@ export default function RecommendationTags({
             className="group inline-flex items-center gap-1 px-3 py-1.5 bg-gradient-to-r from-purple-100 to-pink-100 border border-purple-200 rounded-full text-xs font-medium text-gray-700 transition-all duration-200 hover:from-purple-200 hover:to-pink-200 hover:border-purple-300 hover:shadow-md hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-purple-400/30"
             title={recommendation.description}
           >
-            <span className="group-hover:scale-110 transition-transform duration-200 flex-shrink-0">
-              {recommendation.emoji}
-            </span>
+
             <span className="truncate">
               {recommendation.scenario} · {recommendation.targetPerson} · {recommendation.style}
             </span>

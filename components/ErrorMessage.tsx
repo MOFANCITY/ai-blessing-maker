@@ -18,7 +18,7 @@ export default function ErrorMessage({ message }: ErrorMessageProps) {
       aria-live="assertive"  // 屏幕阅读器会立即通知用户
     >
       {/* 装饰性错误图标，不参与屏幕阅读 */}
-      <div className="absolute top-2 left-2 text-xl" aria-hidden="true">❌</div>
+      <div className="absolute top-2 left-2 text-xl" aria-hidden="true"></div>
       {/* 错误信息文本内容 */}
       <div className="ml-8 font-semibold">{message}</div>
     </div>

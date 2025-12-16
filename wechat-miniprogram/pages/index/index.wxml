@@ -6,10 +6,9 @@
   <block wx:elif="{{blessing && !loading && !error}}">祝福语生成完成</block>
 </view>
 
-<!-- 主内容区域：响应式两列布局 -->
+<!-- 主内容区域：三段式布局 -->
 <view class="container">
-  <!-- 左侧：表单输入区域 -->
-  <view class="form-section card-primary form-column">
+  <view class="form-section card-primary {{formError ? 'form-error' : ''}}">
     <!-- 装饰元素 -->
     <view class="decoration-tr"></view>
 
@@ -138,8 +137,8 @@
     </form>
   </view>
 
-  <!-- 右侧：结果展示区域 -->
-  <view class="result-section result-column">
+  <!-- 底部：结果展示区域 -->
+  <view class="result-section">
     <view wx:if="{{error}}" class="error-container">
       <view class="error-message">
         ❌ {{error}}
@@ -153,13 +152,16 @@
           <button class="action-btn" bindtap="onCopy">
             <text decode="{{true}}">📋 复制</text>
           </button>
+          <button class="action-btn" bindtap="onShare">
+            <text decode="{{true}}">✉️ 分享</text>
+          </button>
           <button class="action-btn" bindtap="onRegenerate">
             <text decode="{{true}}">🔄 重新生成</text>
           </button>
         </view>
       </view>
 
-      <view class="blessing-content">
+      <view class="blessing-content" bindlongpress="onLongPressCard">
         {{blessing}}
       </view>
 
@@ -169,9 +171,21 @@
       </view>
     </view>
 
-    <view wx:else class="empty-state">
-      <view class="empty-icon">🙏</view>
-      <view class="empty-text">请输入相关信息生成祝福语</view>
+    <!-- 长按菜单 -->
+    <view wx:if="{{showLongPressMenu}}" class="long-press-overlay" bindtap="hideLongPressMenu">
+      <view class="long-press-menu" catchtap="">
+        <view class="menu-item" bindtap="onCopy">
+          <text>📋 复制祝福语</text>
+        </view>
+        <view class="menu-item" bindtap="onSaveImage">
+          <text>💾 保存为图片</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 信封飞出动画 -->
+    <view wx:if="{{showEnvelope}}" class="envelope-fly">
+      <text>✉️</text>
     </view>
   </view>
 </view>

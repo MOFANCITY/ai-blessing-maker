@@ -33,7 +33,7 @@ export default function TemplateModeForm({
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <SelectInput
           id="scenario-select"
-          label="🎉 场合"
+          label="场合"
           value={options.scenario}
           placeholder="选择场合"
           options={occasions}
@@ -48,7 +48,7 @@ export default function TemplateModeForm({
 
         <SelectInput
           id="target-person-select"
-          label="👥 对象"
+          label="对象"
           value={options.targetPerson}
           placeholder="选择对象"
           options={targetPersons}
@@ -62,7 +62,7 @@ export default function TemplateModeForm({
 
         <SelectInput
           id="style-select"
-          label="🎨 风格"
+          label="风格"
           value={options.style || ""}
           placeholder="选择风格"
           options={styles}

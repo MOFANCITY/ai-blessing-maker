@@ -23,6 +23,9 @@ Page({
     error: '',              // 错误信息
     copySuccess: false,     // 复制成功状态
     copyFading: false,      // 复制提示淡出动画状态
+    formError: false,       // 表单验证错误状态
+    showLongPressMenu: false, // 长按菜单显示状态
+    showEnvelope: false,    // 信封飞出动画状态
 
     // 配置数据
     scenarios: scenarios,
@@ -154,7 +157,14 @@ Page({
     // 客户端验证
     const validation = validateInput(formData);
     if (!validation.valid) {
-      this.setData({ error: validation.error });
+      this.setData({
+        error: validation.error,
+        formError: true
+      });
+      // 移除错误动画类
+      setTimeout(() => {
+        this.setData({ formError: false });
+      }, 500);
       return;
     }
 
@@ -182,9 +192,10 @@ Page({
     generateBlessing(formData)
       .then(result => {
         this.setData({
-          blessing: result,
           loading: false
         });
+        // 打字机效果显示祝福语
+        this.typeWriterEffect(result);
       })
       .catch(err => {
         this.setData({
@@ -215,9 +226,10 @@ Page({
     generateBlessing(formData)
       .then(result => {
         this.setData({
-          blessing: result,
           loading: false
         });
+        // 打字机效果显示祝福语
+        this.typeWriterEffect(result);
       })
       .catch(err => {
         this.setData({
@@ -260,6 +272,93 @@ Page({
           error: '复制失败，请手动选择文字复制'
         });
       }
+    });
+  },
+
+  /**
+   * 打字机效果显示祝福语
+   * @param {string} text - 要显示的完整文本
+   */
+  typeWriterEffect(text) {
+    this.setData({
+      blessing: ''
+    });
+
+    let index = 0;
+    const timer = setInterval(() => {
+      if (index < text.length) {
+        this.setData({
+          blessing: text.substring(0, index + 1)
+        });
+        index++;
+      } else {
+        clearInterval(timer);
+      }
+    }, 80); // 80ms per character
+  },
+
+  /**
+   * 处理卡片长按事件
+   * 显示长按菜单
+   */
+  onLongPressCard() {
+    this.setData({
+      showLongPressMenu: true
+    });
+  },
+
+  /**
+   * 隐藏长按菜单
+   */
+  hideLongPressMenu() {
+    this.setData({
+      showLongPressMenu: false
+    });
+  },
+
+  /**
+   * 处理分享祝福语功能
+   * 显示信封飞出动画
+   */
+  onShare() {
+    const that = this;
+    this.setData({
+      showEnvelope: true
+    });
+
+    // 1.5秒后隐藏信封动画
+    setTimeout(() => {
+      that.setData({
+        showEnvelope: false
+      });
+    }, 1500);
+
+    // 这里可以实现分享功能
+    // 暂时显示分享提示
+    setTimeout(() => {
+      wx.showToast({
+        title: '分享功能开发中',
+        icon: 'none',
+        duration: 2000
+      });
+    }, 500);
+  },
+
+  /**
+   * 保存祝福语为图片
+   */
+  onSaveImage() {
+    const that = this;
+    this.setData({
+      showLongPressMenu: false
+    });
+
+    // 这里可以实现保存为图片的功能
+    // 由于微信小程序的限制，这里暂时显示提示
+    wx.showToast({
+      title: '图片保存功能开发中',
+      icon: 'none',
+      duration: 2000
     });
   }
 });
