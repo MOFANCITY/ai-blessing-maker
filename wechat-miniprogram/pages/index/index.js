@@ -2,6 +2,8 @@
 const { scenarios, festivals, targetPersons, styles } = require('../../utils/config.js');
 // 导入 API 调用函数
 const { generateBlessing } = require('../../utils/api-client.js');
+// 导入验证函数
+const { validateInput, cleanText } = require('../../utils/validation.js');
 
 Page({
   data: {
@@ -28,11 +30,11 @@ Page({
     targetPersons: targetPersons,
     styles: styles,
 
-    // Picker索引
+    // Picker索引 - 初始化为默认值的索引
     scenarioIndex: 0,
     festivalIndex: 0,
     targetPersonIndex: 0,
-    styleIndex: 0
+    styleIndex: styles.findIndex(style => style.value === '温馨')
   },
 
   /**
@@ -54,6 +56,11 @@ Page({
       } : {
         'formData.customDescription': ''
       }),
+      // 重置picker索引
+      scenarioIndex: 0,
+      festivalIndex: 0,
+      targetPersonIndex: 0,
+      styleIndex: this.data.styles.findIndex(style => style.value === '温馨'),
       // 清空结果和错误
       blessing: '',
       error: ''
@@ -137,8 +144,22 @@ Page({
   onSubmit(e) {
     // 阻止表单默认提交行为已在 WXML 中处理
 
-    // 基本验证
-    const { useSmartMode, customDescription, scenario, targetPerson } = this.data.formData;
+    // 清理输入
+    const formData = { ...this.data.formData };
+    if (formData.customDescription) {
+      formData.customDescription = cleanText(formData.customDescription);
+      this.setData({ 'formData.customDescription': formData.customDescription });
+    }
+
+    // 客户端验证
+    const validation = validateInput(formData);
+    if (!validation.valid) {
+      this.setData({ error: validation.error });
+      return;
+    }
+
+    // 基本验证（保持向后兼容）
+    const { useSmartMode, customDescription, scenario, targetPerson } = formData;
 
     if (useSmartMode && (!customDescription || !customDescription.trim())) {
       this.setData({ error: '请提供祝福语描述' });
@@ -158,7 +179,7 @@ Page({
     });
 
     // 调用 API 生成祝福语
-    generateBlessing(this.data.formData)
+    generateBlessing(formData)
       .then(result => {
         this.setData({
           blessing: result,
@@ -184,8 +205,14 @@ Page({
       error: ''
     });
 
+    // 清理输入
+    const formData = { ...this.data.formData };
+    if (formData.customDescription) {
+      formData.customDescription = cleanText(formData.customDescription);
+    }
+
     // 使用当前选项重新生成
-    generateBlessing(this.data.formData)
+    generateBlessing(formData)
       .then(result => {
         this.setData({
           blessing: result,

@@ -9,7 +9,7 @@
 <!-- 主内容区域：响应式两列布局 -->
 <view class="container">
   <!-- 左侧：表单输入区域 -->
-  <view class="form-section card-primary">
+  <view class="form-section card-primary form-column">
     <!-- 装饰元素 -->
     <view class="decoration-tr"></view>
 
@@ -21,14 +21,14 @@
 
       <view class="mode-buttons">
         <button
-          class="btn-mode {{!formData.useSmartMode ? 'btn-mode-active from-red-500 to-orange-500' : 'btn-mode-inactive'}}"
+          class="btn-mode {{!formData.useSmartMode ? 'btn-mode-active btn-template-active' : 'btn-mode-inactive'}}"
           bindtap="toggleMode"
           data-mode="template"
         >
           🎯 快速模板
         </button>
         <button
-          class="btn-mode {{formData.useSmartMode ? 'btn-mode-active from-blue-500 to-purple-500' : 'btn-mode-inactive'}}"
+          class="btn-mode {{formData.useSmartMode ? 'btn-mode-active btn-smart-active' : 'btn-mode-inactive'}}"
           bindtap="toggleMode"
           data-mode="smart"
         >
@@ -139,7 +139,7 @@
   </view>
 
   <!-- 右侧：结果展示区域 -->
-  <view class="result-section">
+  <view class="result-section result-column">
     <view wx:if="{{error}}" class="error-container">
       <view class="error-message">
         ❌ {{error}}

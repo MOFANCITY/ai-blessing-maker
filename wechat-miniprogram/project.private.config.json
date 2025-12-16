@@ -1,9 +1,9 @@
 {
   "libVersion": "3.12.0",
-  "projectname": "ai-blessing",
+  "projectname": "wechat-miniprogram",
   "condition": {},
   "setting": {
-    "urlCheck": true,
+    "urlCheck": false,
     "coverView": true,
     "lazyloadPlaceholderEnable": false,
     "skylineRenderEnable": false,

@@ -48,7 +48,7 @@
     "disableSWC": true
   },
   "compileType": "miniprogram",
-  "libVersion": "2.19.4",
+  "libVersion": "3.12.0",
   "appid": "wxb75afabc8182f5ef",
   "projectname": "ai-blessing-generator",
   "condition": {
