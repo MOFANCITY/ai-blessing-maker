@@ -12,9 +12,9 @@ Page({
       scenario: '',
       festival: '',
       targetPerson: '',
-      style: '温馨',
+      style: '传统', // 默认传统风格
       customDescription: '',
-      useSmartMode: false
+      useSmartMode: false // 默认模板模式
     },
 
     // 状态管理
@@ -26,6 +26,7 @@ Page({
     formError: false,       // 表单验证错误状态
     showLongPressMenu: false, // 长按菜单显示状态
     showEnvelope: false,    // 信封飞出动画状态
+    currentStep: 1,         // 当前步骤，用于逐步引导模式
 
     // 配置数据
     scenarios: scenarios,
@@ -37,7 +38,7 @@ Page({
     scenarioIndex: 0,
     festivalIndex: 0,
     targetPersonIndex: 0,
-    styleIndex: styles.findIndex(style => style.value === '温馨')
+    styleIndex: styles.findIndex(style => style.value === '传统')
   },
 
   /**
@@ -55,7 +56,7 @@ Page({
         'formData.scenario': '',
         'formData.festival': '',
         'formData.targetPerson': '',
-        'formData.style': '温馨'
+        'formData.style': '传统'
       } : {
         'formData.customDescription': ''
       }),
@@ -63,11 +64,35 @@ Page({
       scenarioIndex: 0,
       festivalIndex: 0,
       targetPersonIndex: 0,
-      styleIndex: this.data.styles.findIndex(style => style.value === '温馨'),
+      styleIndex: this.data.styles.findIndex(style => style.value === '传统'),
       // 清空结果和错误
       blessing: '',
       error: ''
     });
+  },
+
+  /**
+   * 下一步
+   */
+  nextStep() {
+    const { currentStep } = this.data;
+    if (currentStep < 4) {
+      this.setData({
+        currentStep: currentStep + 1
+      });
+    }
+  },
+
+  /**
+   * 上一步
+   */
+  prevStep() {
+    const { currentStep } = this.data;
+    if (currentStep > 1) {
+      this.setData({
+        currentStep: currentStep - 1
+      });
+    }
   },
 
   /**
@@ -176,9 +201,23 @@ Page({
       return;
     }
 
-    if (!useSmartMode && (!scenario || !targetPerson)) {
-      this.setData({ error: '请选择场景和目标人群' });
-      return;
+    if (!useSmartMode) {
+      // 在逐步引导模式下，检查必填项
+      if (!scenario) {
+        this.setData({
+          error: '请选择祝福场景',
+          currentStep: 1  // 返回到相应步骤
+        });
+        return;
+      }
+
+      if (!targetPerson) {
+        this.setData({
+          error: '请选择目标人群',
+          currentStep: 3  // 返回到相应步骤
+        });
+        return;
+      }
     }
 
     // 开始加载
@@ -191,11 +230,10 @@ Page({
     // 调用 API 生成祝福语
     generateBlessing(formData)
       .then(result => {
-        this.setData({
-          loading: false
+        // 跳转到结果页面显示祝福语
+        wx.navigateTo({
+          url: `/pages/result/result?blessing=${encodeURIComponent(result)}&formData=${encodeURIComponent(JSON.stringify(formData))}`
         });
-        // 打字机效果显示祝福语
-        this.typeWriterEffect(result);
       })
       .catch(err => {
         this.setData({
@@ -225,11 +263,10 @@ Page({
     // 使用当前选项重新生成
     generateBlessing(formData)
       .then(result => {
-        this.setData({
-          loading: false
+        // 跳转到结果页面显示祝福语
+        wx.navigateTo({
+          url: `/pages/result/result?blessing=${encodeURIComponent(result)}&formData=${encodeURIComponent(JSON.stringify(formData))}`
         });
-        // 打字机效果显示祝福语
-        this.typeWriterEffect(result);
       })
       .catch(err => {
         this.setData({
@@ -359,6 +396,32 @@ Page({
       title: '图片保存功能开发中',
       icon: 'none',
       duration: 2000
+    });
+  },
+
+  /**
+   * 处理语音输入功能
+   */
+  onVoiceInput() {
+    const that = this;
+    wx.showModal({
+      title: '语音输入',
+      content: '语音输入功能正在开发中，请暂时使用文字输入',
+      showCancel: false,
+      confirmText: '知道了'
+    });
+  },
+
+  /**
+   * 处理语音播放功能
+   */
+  onVoicePlay() {
+    const that = this;
+    wx.showModal({
+      title: '语音播放',
+      content: '语音播放功能正在开发中，请暂时阅读文字内容',
+      showCancel: false,
+      confirmText: '知道了'
     });
   }
 });

@@ -4,30 +4,17 @@
  * 每个项目包含值、显示标签和分类信息
  */
 const occasions = [
-  // 传统节日分类
+  // 传统节日分类 - 优先显示
   { value: "春节", label: "🧧 春节", category: "传统节日" },
-  { value: "元宵节", label: "🏮 元宵节", category: "传统节日" },
-  { value: "清明节", label: "🌸 清明节", category: "传统节日" },
+  { value: "中秋节", label: "🌕 中秋节", category: "传统节日" },
   { value: "端午节", label: "🚣 端午节", category: "传统节日" },
+  { value: "清明节", label: "🌸 清明节", category: "传统节日" },
+  { value: "重阳节", label: "🏔️ 重阳节", category: "传统节日" },
+  { value: "元宵节", label: "🏮 元宵节", category: "传统节日" },
   { value: "七夕节", label: "💕 七夕节", category: "传统节日" },
   { value: "中元节", label: "🕯️ 中元节", category: "传统节日" },
-  { value: "中秋节", label: "🌕 中秋节", category: "传统节日" },
-  { value: "重阳节", label: "🏔️ 重阳节", category: "传统节日" },
 
-  // 现代节日分类
-  { value: "元旦", label: "🎊 元旦", category: "现代节日" },
-  { value: "情人节", label: "💝 情人节", category: "现代节日" },
-  { value: "白色情人节", label: "🤍 白色情人节", category: "现代节日" },
-  { value: "妇女节", label: "👩 妇女节", category: "现代节日" },
-  { value: "劳动节", label: "⚒️ 劳动节", category: "现代节日" },
-  { value: "母亲节", label: "🌹 母亲节", category: "现代节日" },
-  { value: "儿童节", label: "🧸 儿童节", category: "现代节日" },
-  { value: "父亲节", label: "👔 父亲节", category: "现代节日" },
-  { value: "教师节", label: "👨‍🏫 教师节", category: "现代节日" },
-  { value: "国庆节", label: "🇨🇳 国庆节", category: "现代节日" },
-  { value: "圣诞节", label: "🎄 圣诞节", category: "现代节日" },
-
-  // 人生重要时刻分类
+  // 人生重要时刻分类 - 常用场景
   { value: "生日", label: "🎂 生日庆祝", category: "人生时刻" },
   { value: "婚礼", label: "💒 婚礼庆典", category: "人生时刻" },
   { value: "毕业", label: "🎓 毕业典礼", category: "人生时刻" },
@@ -36,15 +23,28 @@ const occasions = [
 
   // 成就庆祝分类
   { value: "升职", label: "📈 升职加薪", category: "成就庆祝" },
-  { value: "开业", label: "🏪 开业大吉", category: "成就庆祝" },
   { value: "获奖", label: "🏆 获奖祝贺", category: "成就庆祝" },
   { value: "考试", label: "📝 考试成功", category: "成就庆祝" },
+  { value: "开业", label: "🏪 开业大吉", category: "成就庆祝" },
 
   // 生活祝福分类
-  { value: "搬家", label: "🏠 乔迁新居", category: "生活祝福" },
   { value: "康复", label: "💪 康复祝福", category: "生活祝福" },
+  { value: "搬家", label: "🏠 乔迁新居", category: "生活祝福" },
   { value: "退休", label: "🌅 退休庆祝", category: "生活祝福" },
   { value: "日常", label: "😊 日常问候", category: "生活祝福" },
+
+  // 现代节日分类 - 移至后面
+  { value: "元旦", label: "🎊 元旦", category: "现代节日" },
+  { value: "国庆节", label: "🇨🇳 国庆节", category: "现代节日" },
+  { value: "情人节", label: "💝 情人节", category: "现代节日" },
+  { value: "白色情人节", label: "🤍 白色情人节", category: "现代节日" },
+  { value: "妇女节", label: "👩 妇女节", category: "现代节日" },
+  { value: "母亲节", label: "🌹 母亲节", category: "现代节日" },
+  { value: "父亲节", label: "👔 父亲节", category: "现代节日" },
+  { value: "儿童节", label: "🧸 儿童节", category: "现代节日" },
+  { value: "教师节", label: "👨‍🏫 教师节", category: "现代节日" },
+  { value: "劳动节", label: "⚒️ 劳动节", category: "现代节日" },
+  { value: "圣诞节", label: "🎄 圣诞节", category: "现代节日" },
 ];
 
 /**
@@ -82,19 +82,19 @@ const targetPersons = [
 
 /**
  * 祝福语风格配置数据
- * 定义了不同的祝福语表达风格，从温馨亲切到正式庄重
+ * 定义了不同的祝福语表达风格，从传统经典到现代时尚
  * 根据不同场景和关系选择合适的表达方式
  */
 const styles = [
+  { value: "传统", label: "传统经典" }, // 移至第一位，默认选择
   { value: "温馨", label: "温馨亲切" },
   { value: "正式", label: "正式庄重" },
-  { value: "幽默", label: "幽默风趣" },
   { value: "简洁", label: "简洁明了" },
   { value: "诗意", label: "诗意优美" },
-  { value: "传统", label: "传统经典" },
-  { value: "现代", label: "现代时尚" },
   { value: "感恩", label: "感恩感谢" },
   { value: "激励", label: "激励鼓舞" },
+  { value: "幽默", label: "幽默风趣" }, // 移至后面
+  { value: "现代", label: "现代时尚" }, // 移至后面
 ];
 
 /**

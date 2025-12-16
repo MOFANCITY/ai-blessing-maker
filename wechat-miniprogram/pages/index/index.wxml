@@ -15,7 +15,7 @@
     <!-- 模式选择 -->
     <view class="mode-selector text-center mb-6">
       <view class="title festive-title">
-        <text decode="{{true}}">🤖 智能祝福生成器 ✨</text>
+        <text decode="{{true}}">🎊 祝福语生成器</text>
       </view>
 
       <view class="mode-buttons">
@@ -24,14 +24,14 @@
           bindtap="toggleMode"
           data-mode="template"
         >
-          🎯 快速模板
+          📝 选择模板
         </button>
         <button
           class="btn-mode {{formData.useSmartMode ? 'btn-mode-active btn-smart-active' : 'btn-mode-inactive'}}"
           bindtap="toggleMode"
           data-mode="smart"
         >
-          💬 智能描述
+          🎤 语音输入
         </button>
       </view>
     </view>
@@ -40,79 +40,142 @@
       <!-- 智能模式表单 -->
       <view wx:if="{{formData.useSmartMode}}" class="mode-content">
         <view class="input-group">
-          <label class="input-label">请输入祝福语描述</label>
-          <textarea
-            class="textarea-input"
-            placeholder="例如：明天是我最好的朋友小明的生日，他最近工作很辛苦，想给他一个温暖的生日祝福..."
-            value="{{formData.customDescription}}"
-            bindinput="onInputChange"
-            data-field="customDescription"
-            maxlength="300"
-          ></textarea>
+          <label class="input-label">请描述您的祝福需求</label>
+          <view class="voice-input-container">
+            <textarea
+              class="textarea-input"
+              placeholder="例如：明天是我最好的朋友小明的生日，他最近工作很辛苦，想给他一个温暖的生日祝福..."
+              value="{{formData.customDescription}}"
+              bindinput="onInputChange"
+              data-field="customDescription"
+              maxlength="300"
+            ></textarea>
+            <button class="voice-btn" bindtap="onVoiceInput">
+              <text>🎤 语音输入</text>
+            </button>
+          </view>
           <view class="char-count">{{formData.customDescription.length}}/300</view>
         </view>
       </view>
 
-      <!-- 经典模板模式表单 -->
+      <!-- 经典模板模式表单 - 逐步引导模式 -->
       <view wx:else class="mode-content">
-        <view class="input-group">
-          <label class="input-label">祝福场景 *</label>
-          <picker
-            mode="selector"
-            range="{{scenarios}}"
-            range-key="label"
-            value="{{scenarioIndex}}"
-            bindchange="onScenarioChange"
-          >
-            <view class="picker-input {{formData.scenario ? '' : 'placeholder'}}">
-              {{formData.scenario ? scenarios[scenarioIndex].label : '请选择祝福场景'}}
-            </view>
-          </picker>
+        <!-- 步骤指示器标题 -->
+        <view class="step-indicator-title">
+          <text wx:if="{{currentStep === 1}}">选择祝福场景</text>
+          <text wx:if="{{currentStep === 2}}">选择节日类型</text>
+          <text wx:if="{{currentStep === 3}}">选择目标人群</text>
+          <text wx:if="{{currentStep === 4}}">选择祝福风格</text>
         </view>
 
-        <view class="input-group">
-          <label class="input-label">节日类型</label>
-          <picker
-            mode="selector"
-            range="{{festivals}}"
-            range-key="label"
-            value="{{festivalIndex}}"
-            bindchange="onFestivalChange"
-          >
-            <view class="picker-input {{formData.festival ? '' : 'placeholder'}}">
-              {{formData.festival ? festivals[festivalIndex].label : '无特定节日'}}
-            </view>
-          </picker>
+        <!-- 步骤指示器 -->
+        <view class="step-indicator">
+          <view class="step-item {{currentStep === 1 ? 'active' : ''}}">
+            <view class="step-number">1</view>
+          </view>
+          <view class="step-separator"></view>
+          <view class="step-item {{currentStep === 2 ? 'active' : ''}}">
+            <view class="step-number">2</view>
+          </view>
+          <view class="step-separator"></view>
+          <view class="step-item {{currentStep === 3 ? 'active' : ''}}">
+            <view class="step-number">3</view>
+          </view>
+          <view class="step-separator"></view>
+          <view class="step-item {{currentStep === 4 ? 'active' : ''}}">
+            <view class="step-number">4</view>
+          </view>
         </view>
 
-        <view class="input-group">
-          <label class="input-label">目标人群 *</label>
-          <picker
-            mode="selector"
-            range="{{targetPersons}}"
-            range-key="label"
-            value="{{targetPersonIndex}}"
-            bindchange="onTargetPersonChange"
-          >
-            <view class="picker-input {{formData.targetPerson ? '' : 'placeholder'}}">
-              {{formData.targetPerson ? targetPersons[targetPersonIndex].label : '请选择目标人群'}}
-            </view>
-          </picker>
+        <!-- 步骤内容 -->
+        <!-- 步骤1: 祝福场景 -->
+        <view wx:if="{{currentStep === 1}}" class="step-content">
+          <view class="input-group">
+            <label class="input-label">请选择祝福场景 *</label>
+            <picker
+              mode="selector"
+              range="{{scenarios}}"
+              range-key="label"
+              value="{{scenarioIndex}}"
+              bindchange="onScenarioChange"
+            >
+              <view class="picker-input {{formData.scenario ? '' : 'placeholder'}}">
+                {{formData.scenario ? scenarios[scenarioIndex].label : '请选择祝福场景'}}
+              </view>
+            </picker>
+          </view>
+
+          <view class="step-navigation">
+            <button class="btn-step-next" bindtap="nextStep" disabled="{{!formData.scenario}}">下一步</button>
+          </view>
         </view>
 
-        <view class="input-group">
-          <label class="input-label">祝福风格</label>
-          <picker
-            mode="selector"
-            range="{{styles}}"
-            range-key="label"
-            value="{{styleIndex}}"
-            bindchange="onStyleChange"
-          >
-            <view class="picker-input">
-              {{formData.style ? styles[styleIndex].label : '温馨亲切'}}
-            </view>
-          </picker>
+        <!-- 步骤2: 节日类型 -->
+        <view wx:elif="{{currentStep === 2}}" class="step-content">
+          <view class="input-group">
+            <label class="input-label">请选择节日类型</label>
+            <picker
+              mode="selector"
+              range="{{festivals}}"
+              range-key="label"
+              value="{{festivalIndex}}"
+              bindchange="onFestivalChange"
+            >
+              <view class="picker-input {{formData.festival ? '' : 'placeholder'}}">
+                {{formData.festival ? festivals[festivalIndex].label : '无特定节日'}}
+              </view>
+            </picker>
+          </view>
+
+          <view class="step-navigation">
+            <button class="btn-step-prev" bindtap="prevStep">上一步</button>
+            <button class="btn-step-next" bindtap="nextStep">下一步</button>
+          </view>
+        </view>
+
+        <!-- 步骤3: 目标人群 -->
+        <view wx:elif="{{currentStep === 3}}" class="step-content">
+          <view class="input-group">
+            <label class="input-label">请选择目标人群 *</label>
+            <picker
+              mode="selector"
+              range="{{targetPersons}}"
+              range-key="label"
+              value="{{targetPersonIndex}}"
+              bindchange="onTargetPersonChange"
+            >
+              <view class="picker-input {{formData.targetPerson ? '' : 'placeholder'}}">
+                {{formData.targetPerson ? targetPersons[targetPersonIndex].label : '请选择目标人群'}}
+              </view>
+            </picker>
+          </view>
+
+          <view class="step-navigation">
+            <button class="btn-step-prev" bindtap="prevStep">上一步</button>
+            <button class="btn-step-next" bindtap="nextStep" disabled="{{!formData.targetPerson}}">下一步</button>
+          </view>
+        </view>
+
+        <!-- 步骤4: 祝福风格 -->
+        <view wx:elif="{{currentStep === 4}}" class="step-content">
+          <view class="input-group">
+            <label class="input-label">请选择祝福风格</label>
+            <picker
+              mode="selector"
+              range="{{styles}}"
+              range-key="label"
+              value="{{styleIndex}}"
+              bindchange="onStyleChange"
+            >
+              <view class="picker-input">
+                {{formData.style ? styles[styleIndex].label : '温馨亲切'}}
+              </view>
+            </picker>
+          </view>
+
+          <view class="step-navigation">
+            <button class="btn-step-prev" bindtap="prevStep">上一步</button>
+          </view>
         </view>
       </view>
 
@@ -149,11 +212,11 @@
       <view class="result-header">
         <text class="result-title">🎉 生成的祝福语</text>
         <view class="result-actions">
+          <button class="action-btn" bindtap="onVoicePlay">
+            <text decode="{{true}}">🔊 播放</text>
+          </button>
           <button class="action-btn" bindtap="onCopy">
             <text decode="{{true}}">📋 复制</text>
-          </button>
-          <button class="action-btn" bindtap="onShare">
-            <text decode="{{true}}">✉️ 分享</text>
           </button>
           <button class="action-btn" bindtap="onRegenerate">
             <text decode="{{true}}">🔄 重新生成</text>
