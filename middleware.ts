@@ -1,7 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getClientIP, checkRateLimit } from "@/lib/rate-limit";
 
+// 检测是否为微信小程序
+function isWeChatMiniProgram(userAgent: string): boolean {
+  // 微信小程序的User-Agent包含MicroMessenger
+  return userAgent.includes('MicroMessenger');
+}
+
 export async function middleware(req: NextRequest) {
+  // 检查是否为微信小程序访问，如果不是则拒绝
+  const userAgent = req.headers.get('user-agent') || '';
+  if (!isWeChatMiniProgram(userAgent)) {
+    return NextResponse.json(
+      { error: "此应用仅支持微信小程序访问，请在微信中打开" },
+      { status: 403 }
+    );
+  }
+
   // 只对祝福API进行速率限制
   if (!req.nextUrl.pathname.startsWith("/api/blessing")) {
     return NextResponse.next();
