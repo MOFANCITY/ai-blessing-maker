@@ -21,7 +21,12 @@ interface BlessingRequest {
 export function createSmartPrompt(options: BlessingRequest): string {
   const { customDescription } = options;
   
-  return `请根据以下描述生成一段个性化的祝福语：
+  return `
+# Role
+你是一位精通中文社交礼仪与情感表达的文案专家，擅长根据不同人际关系捕捉最恰当的语气，创作既真诚又不落俗套的祝福语。
+
+# Task
+请根据以下描述生成一段个性化的祝福语：
 
 用户描述：${customDescription}
 
@@ -35,6 +40,7 @@ export function createSmartPrompt(options: BlessingRequest): string {
 7. 如果描述中包含特殊背景，要巧妙地体现出来
 8. 避免使用敏感词汇
 
+# Output
 请直接返回祝福语内容，不需要其他说明。`;
 }
 
@@ -47,19 +53,25 @@ export function createSmartPrompt(options: BlessingRequest): string {
 export function createTemplatePrompt(options: BlessingRequest): string {
   const { scenario, targetPerson, style = "温馨" } = options;
 
-  return `请为我生成一段祝福语，要求如下：
+  return `
+# Role
+你是一位精通中文社交礼仪与情感表达的文案专家，擅长根据不同人际关系捕捉最恰当的语气，创作既真诚又不落俗套的祝福语。
+
+# Task
+请根据以下变量，为我撰写一段地道的中文祝福语：
 - 祝福场合：${scenario}
-- 目标人群：${targetPerson}
-- 风格：${style}
+- 祝福对象：${targetPerson}（请考虑与此人的亲疏关系）
+- 期望风格：${style}
 
-请生成一段真诚、温暖、符合中文表达习惯的祝福语。祝福语应该：
-1. 符合指定的祝福场合和氛围
-2. 针对目标人群使用合适的称呼和语气
-3. 内容积极正面，表达美好祝愿
-4. 长度适中，大约50-80字
-5. 语言流畅自然，避免过于华丽的辞藻
+# Requirements
+1. 身份对齐：根据“祝福对象”自动调整称呼（如敬语“您”或亲昵称呼）和社交距离，确保不突兀。
+2. 内容结构：建议包含【对现状的肯定/赞美】+【核心祝愿】+【对未来的美好期许】。
+3. 语言去水：避免空洞的成语堆砌，优先使用口语化但有质感的表达，字数严格控制在 50-80 字之间。
+4. 情感共鸣：内容要积极正面，文字要有温度，读起来像是由衷而发而非模板生成。
 
-请直接返回祝福语内容，不需要其他说明。`;
+# Output
+请直接输出祝福语正文，无需任何开头语或解释。
+`;
 }
 
 /**
