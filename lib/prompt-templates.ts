@@ -33,6 +33,7 @@ export function createSmartPrompt(options: BlessingRequest): string {
 5. 长度适中（50-100字），真诚自然，避免套话模板
 6. 语言温暖有力，富有个人色彩和情感共鸣
 7. 如果描述中包含特殊背景，要巧妙地体现出来
+8. 避免使用敏感词汇
 
 请直接返回祝福语内容，不需要其他说明。`;
 }
