@@ -14,12 +14,14 @@ import { validateInput, cleanText } from "@/lib/validation";
  * 定义了前端发送的祝福语生成请求的数据结构
  */
 interface BlessingRequest {
-  scenario: string;           // 场景类型（经典模式）
-  festival: string;           // 节日类型（经典模式）
-  targetPerson: string;       // 目标人群（经典模式）
+  occasion?: string;          // 场合类型（经典模式）
+  festival?: string;          // 节日类型（经典模式）
+  targetPerson?: string;      // 目标人群（经典模式）
   style?: string;             // 祝福语风格（可选）
   customDescription?: string; // 自定义描述（智能模式）
   useSmartMode?: boolean;     // 是否使用智能模式
+  timestamp?: number;         // 时间戳（可选）
+  version?: string;           // 版本号（可选）
 }
 
 /**

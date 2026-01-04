@@ -58,7 +58,7 @@ describe('/api/blessing', () => {
 
   it('successfully generates blessing with template mode', async () => {
     const requestBody = {
-      scenario: 'birthday',
+      occasion: 'birthday',
       festival: 'spring-festival',
       targetPerson: 'colleague',
       style: 'formal',
@@ -86,7 +86,7 @@ describe('/api/blessing', () => {
 
   it('handles AI service errors gracefully', async () => {
     const requestBody = {
-      scenario: 'birthday',
+      occasion: 'birthday',
       festival: '',
       targetPerson: 'friend',
       useSmartMode: false
@@ -111,7 +111,7 @@ describe('/api/blessing', () => {
 
   it('handles axios 429 errors with rate limit message', async () => {
     const requestBody = {
-      scenario: 'birthday',
+      occasion: 'birthday',
       festival: '',
       targetPerson: 'friend',
       useSmartMode: false
@@ -150,7 +150,7 @@ describe('/api/blessing', () => {
 
   it('handles generic axios errors with default message', async () => {
     const requestBody = {
-      scenario: 'birthday',
+      occasion: 'birthday',
       festival: '',
       targetPerson: 'friend',
       useSmartMode: false
@@ -198,7 +198,7 @@ describe('/api/blessing', () => {
     const consoleSpy = jest.spyOn(console, 'error').mockImplementation()
 
     const requestBody = {
-      scenario: 'birthday',
+      occasion: 'birthday',
       festival: '',
       targetPerson: 'friend',
       useSmartMode: false

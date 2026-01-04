@@ -42,7 +42,7 @@ export function validateInput(data: unknown): { valid: boolean; error?: string }
   
   // 经典模式验证（简单非空检查）
   else {
-    if (!inputData.scenario || !inputData.targetPerson) {
+    if (!inputData.occasion || !inputData.targetPerson) {
       return { valid: false, error: "请选择场合和对象" };
     }
   }

@@ -4,12 +4,14 @@
  * 支持两种模式：经典模板模式和智能描述模式
  */
 interface BlessingRequest {
-  scenario: string;           // 场景类型（经典模式使用）
-  festival: string;           // 节日类型（经典模式使用）
+  occasion: string;           // 场合类型（经典模式使用）
+  festival?: string;          // 节日类型（经典模式使用）
   targetPerson: string;       // 目标人群（经典模式使用）
   style?: string;             // 祝福语风格（可选）
   customDescription?: string; // 用户自定义描述（智能模式使用）
   useSmartMode?: boolean;     // 是否使用智能模式
+  timestamp?: number;         // 时间戳（可选）
+  version?: string;           // 版本号（可选）
 }
 
 /**
@@ -51,7 +53,7 @@ export function createSmartPrompt(options: BlessingRequest): string {
  * @returns 完整的 AI 提示词文本
  */
 export function createTemplatePrompt(options: BlessingRequest): string {
-  const { scenario, targetPerson, style = "温馨" } = options;
+  const { occasion, targetPerson, style = "温馨" } = options;
 
   return `
 # Role
@@ -59,7 +61,7 @@ export function createTemplatePrompt(options: BlessingRequest): string {
 
 # Task
 请根据以下变量，为我撰写一段地道的中文祝福语：
-- 祝福场合：${scenario}
+- 祝福场合：${occasion}
 - 祝福对象：${targetPerson}（请考虑与此人的亲疏关系）
 - 期望风格：${style}
 
