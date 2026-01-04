@@ -4,9 +4,9 @@
  * 支持两种模式：经典模板模式和智能描述模式
  */
 interface BlessingRequest {
-  occasion: string;           // 场合类型（经典模式使用）
+  occasion?: string;          // 场合类型（经典模式使用）
   festival?: string;          // 节日类型（经典模式使用）
-  targetPerson: string;       // 目标人群（经典模式使用）
+  targetPerson?: string;      // 目标人群（经典模式使用）
   style?: string;             // 祝福语风格（可选）
   customDescription?: string; // 用户自定义描述（智能模式使用）
   useSmartMode?: boolean;     // 是否使用智能模式
@@ -54,6 +54,11 @@ export function createSmartPrompt(options: BlessingRequest): string {
  */
 export function createTemplatePrompt(options: BlessingRequest): string {
   const { occasion, targetPerson, style = "温馨" } = options;
+
+  // 检查必需参数
+  if (!occasion || !targetPerson) {
+    throw new Error('经典模式需要提供场合和目标人群');
+  }
 
   return `
 # Role
