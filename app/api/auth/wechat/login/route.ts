@@ -19,9 +19,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<UserLogin
       );
     }
 
-    // 调用微信接口获取 openid
+    // 调用微信接口获取 openid (使用 Mini Program 专用接口)
     const wechatResponse = await fetch(
-      `https://api.weixin.qq.com/sns/oauth2/access_token?appid=${process.env.WECHAT_APP_ID}&secret=${process.env.WECHAT_APP_SECRET}&code=${code}&grant_type=authorization_code`,
+      `https://api.weixin.qq.com/sns/jscode2session?appid=${process.env.WECHAT_APP_ID}&secret=${process.env.WECHAT_APP_SECRET}&js_code=${code}&grant_type=authorization_code`,
       {
         method: 'GET',
         headers: {
