@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase, historyDb } from '@/lib/supabase';
-import { createClient } from '@supabase/supabase-js';
+import * as crypto from 'crypto';
+import { UserHistory } from '@/lib/types/auth';
 
 // JWT Secret
 const JWT_SECRET = process.env.JWT_SECRET || 'default-secret-change-in-production';
@@ -8,14 +9,18 @@ const JWT_SECRET = process.env.JWT_SECRET || 'default-secret-change-in-productio
 /**
  * 验证用户 token
  */
-function verifyToken(token: string): { userId: string; openid: string } | null {
+interface TokenPayload {
+  userId: string;
+  openid: string;
+}
+
+function verifyToken(token: string): TokenPayload | null {
   try {
     const parts = token.split('.');
     if (parts.length !== 3) return null;
     
     const [header, payload, signature] = parts;
     
-    const crypto = require('crypto');
     const expectedSignature = crypto
       .createHmac('sha256', JWT_SECRET)
       .update(`${header}.${payload}`)
@@ -31,7 +36,7 @@ function verifyToken(token: string): { userId: string; openid: string } | null {
       userId: decoded.sub,
       openid: decoded.openid,
     };
-  } catch (error) {
+  } catch {
     return null;
   }
 }
@@ -67,13 +72,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const limit = parseInt(searchParams.get('limit') || '50', 10);
 
     // 获取用户信息
-    const { data: users } = await supabase
+    const { data: users, error: userError } = await supabase
       .from('users')
       .select('id')
       .eq('openid', decoded.openid)
       .single();
     
-    if (!users) {
+    if (userError || !users) {
       return NextResponse.json(
         { error: '用户不存在' },
         { status: 404 }
@@ -84,13 +89,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     return NextResponse.json({
       success: true,
-      history: history.map(item => ({
+      history: history.map((item: UserHistory) => ({
         id: item.id,
         blessing: item.blessing,
         occasion: item.occasion,
-        targetPerson: item.target_person,
+        targetPerson: item.targetPerson,
         style: item.style,
-        createdAt: item.created_at,
+        createdAt: item.createdAt,
       })),
     });
   } catch (error) {

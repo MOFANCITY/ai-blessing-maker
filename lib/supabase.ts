@@ -130,12 +130,12 @@ export const userDb = {
     last_login_at?: boolean;
     total_blessings_generated?: number;
   }) {
-    const updateData: Record<string, any> = { ...updates };
+    const updateData: Record<string, unknown> = {};
     
-    if (updates.last_login_at) {
-      updateData.last_login_at = new Date().toISOString();
-      delete updateData.last_login_at;
-    }
+    if (updates.nickname !== undefined) updateData.nickname = updates.nickname;
+    if (updates.avatar_url !== undefined) updateData.avatar_url = updates.avatar_url;
+    if (updates.total_blessings_generated !== undefined) updateData.total_blessings_generated = updates.total_blessings_generated;
+    if (updates.last_login_at) updateData.last_login_at = new Date().toISOString();
     
     const { data, error } = await supabase
       .from(TABLES.USERS)

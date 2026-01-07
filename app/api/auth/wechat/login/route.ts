@@ -1,14 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { WechatLoginRequest, UserLoginResponse } from '@/lib/types/auth';
-import { supabase, userDb, TABLES } from '@/lib/supabase';
-import { createClient } from '@supabase/supabase-js';
-
-// 微信小程序配置
-const WECHAT_APP_ID = process.env.WECHAT_APP_ID;
-const WECHAT_APP_SECRET = process.env.WECHAT_APP_SECRET;
-
-// JWT Secret
-const JWT_SECRET = process.env.JWT_SECRET || 'default-secret-change-in-production';
+import { userDb } from '@/lib/supabase';
+import * as crypto from 'crypto';
 
 /**
  * 微信登录 API
@@ -26,9 +19,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<UserLogin
       );
     }
 
-    // 调用微信接口获取 openid 和 session_key
+    // 调用微信接口获取 openid
     const wechatResponse = await fetch(
-      `https://api.weixin.qq.com/sns/oauth2/access_token?appid=${WECHAT_APP_ID}&secret=${WECHAT_APP_SECRET}&code=${code}&grant_type=authorization_code`,
+      `https://api.weixin.qq.com/sns/oauth2/access_token?appid=${process.env.WECHAT_APP_ID}&secret=${process.env.WECHAT_APP_SECRET}&code=${code}&grant_type=authorization_code`,
       {
         method: 'GET',
         headers: {
@@ -47,7 +40,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<UserLogin
       );
     }
 
-    const { openid, unionid, access_token, expires_in } = wechatData;
+    const { openid, unionid, expires_in } = wechatData;
 
     // 使用 Supabase 查询用户
     let user = await userDb.getUserByOpenid(openid);
@@ -112,7 +105,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<UserLogin
  * 验证用户并获取用户信息
  * GET /api/auth/wechat/login
  */
-export async function GET(request: NextRequest): Promise<NextResponse<{ user: any } | { error: string }>> {
+export async function GET(request: NextRequest): Promise<NextResponse<{ user: unknown } | { error: string }>> {
   try {
     // 从 Cookie 获取 token
     const token = request.cookies.get('auth_token')?.value;
@@ -169,6 +162,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<{ user: an
  * 生成 JWT token
  */
 function generateToken(userId: string, openid: string): string {
+  const JWT_SECRET = process.env.JWT_SECRET || 'default-secret-change-in-production';
   const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64');
   const payload = Buffer.from(JSON.stringify({
     sub: userId,
@@ -177,7 +171,6 @@ function generateToken(userId: string, openid: string): string {
     exp: Date.now() + 7 * 24 * 60 * 60 * 1000, // 7天有效期
   })).toString('base64');
   
-  const crypto = require('crypto');
   const signature = crypto
     .createHmac('sha256', JWT_SECRET)
     .update(`${header}.${payload}`)
@@ -195,8 +188,8 @@ function verifyToken(token: string): { userId: string; openid: string } | null {
     if (parts.length !== 3) return null;
     
     const [header, payload, signature] = parts;
+    const JWT_SECRET = process.env.JWT_SECRET || 'default-secret-change-in-production';
     
-    const crypto = require('crypto');
     const expectedSignature = crypto
       .createHmac('sha256', JWT_SECRET)
       .update(`${header}.${payload}`)
@@ -212,7 +205,7 @@ function verifyToken(token: string): { userId: string; openid: string } | null {
       userId: decoded.sub,
       openid: decoded.openid,
     };
-  } catch (error) {
+  } catch {
     return null;
   }
 }
