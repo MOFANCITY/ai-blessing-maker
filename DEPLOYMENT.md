@@ -125,7 +125,7 @@ PRIMARY_AI_MODEL=moonshot-v1-8k
 | `WECHAT_APP_ID` | `wx926ef6d03d4ca2bd` | 微信小程序 AppID |
 | `WECHAT_APP_SECRET` | `xxxxx` | 微信小程序 AppSecret |
 | `SUPABASE_URL` | `https://xxx.supabase.co` | Supabase 项目 URL |
-| `SUPABASE_SERVICE_KEY` | `xxx` | Supabase service_role key |
+| `SUPABASE_SERVICE_ROLE_KEY` | `xxx` | Supabase service_role key |
 | `JWT_SECRET` | `xxx` | JWT 签名密钥 |
 
 #### 4. 配置 Upstash KV（速率限制）

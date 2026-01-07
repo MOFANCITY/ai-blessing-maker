@@ -8,7 +8,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 // Supabase 配置
 const getSupabaseConfig = () => ({
   url: process.env.SUPABASE_URL,
-  key: process.env.SUPABASE_SERVICE_KEY,
+  key: process.env.SUPABASE_SERVICE_ROLE_KEY,
 });
 
 // 延迟创建 Supabase 客户端
@@ -22,7 +22,7 @@ export function getSupabaseClient(): SupabaseClient {
   if (!supabaseInstance) {
     const config = getSupabaseConfig();
     if (!config.url || !config.key) {
-      throw new Error('Supabase configuration is missing. Please set SUPABASE_URL and SUPABASE_SERVICE_KEY environment variables.');
+      throw new Error('Supabase configuration is missing. Please set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY environment variables.');
     }
     supabaseInstance = createClient(config.url, config.key);
   }
