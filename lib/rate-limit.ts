@@ -20,7 +20,7 @@ const RATE_LIMIT_CONFIG = {
  * 环境检测
  */
 const isDevelopment = process.env.NODE_ENV === 'development';
-const hasKVConfig = !!(process.env.KV_URL || process.env.KV_REST_API_URL);
+const hasKVConfig = !!(process.env.brl_KV_URL || process.env.brl_KV_REST_API_URL);
 
 /**
  * 开发环境内存缓存（简单的速率限制）
