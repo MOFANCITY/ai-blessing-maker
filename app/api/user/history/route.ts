@@ -4,8 +4,9 @@ import { verifyToken } from '@/lib/auth';
 import { UserHistory } from '@/lib/types/auth';
 
 /**
- * 获取用户历史记录
- * GET /api/user/history
+ * 获取用户历史记录或统计数据
+ * GET /api/user/history - 获取历史记录
+ * GET /api/user/history?stats=true - 获取祝福语统计数据
  */
 export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
@@ -29,9 +30,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // 从 URL 获取 limit 参数
+    // 从 URL 获取参数
     const { searchParams } = new URL(request.url);
     const limit = parseInt(searchParams.get('limit') || '50', 10);
+    const isStatsRequest = searchParams.get('stats') === 'true';
 
     // 获取用户信息
     const { data: users, error: userError } = await supabase
@@ -39,12 +41,49 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       .select('id')
       .eq('openid', decoded.openid)
       .single();
-    
+
     if (userError || !users) {
       return NextResponse.json(
         { error: '用户不存在' },
         { status: 404 }
       );
+    }
+
+    // 如果是统计请求，返回统计数据
+    if (isStatsRequest) {
+      // 获取总数
+      const { count: totalCount, error: totalError } = await supabase
+        .from('user_history')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', users.id);
+
+      if (totalError) {
+        throw totalError;
+      }
+
+      // 获取当月数量
+      const now = new Date();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+
+      const { count: monthlyCount, error: monthlyError } = await supabase
+        .from('user_history')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', users.id)
+        .gte('created_at', startOfMonth.toISOString())
+        .lte('created_at', endOfMonth.toISOString());
+
+      if (monthlyError) {
+        throw monthlyError;
+      }
+
+      return NextResponse.json({
+        success: true,
+        stats: {
+          total: totalCount || 0,
+          monthly: monthlyCount || 0,
+        },
+      });
     }
 
     const history = await historyDb.getUserHistory(users.id, limit);
