@@ -8,6 +8,61 @@ import { generateBlessing } from "@/lib/ai-service";
 import { createBlessingPrompt } from "@/lib/prompt-templates";
 // 输入验证和清理函数
 import { validateInput, cleanText } from "@/lib/validation";
+// 数据库客户端
+import { supabase, historyDb } from "@/lib/supabase";
+// JWT验证相关
+import * as crypto from 'crypto';
+
+// JWT Secret
+const JWT_SECRET = process.env.JWT_SECRET || 'default-secret-change-in-production';
+
+/**
+ * 验证用户 token
+ */
+interface TokenPayload {
+  userId: string;
+  openid: string;
+}
+
+function verifyToken(token: string): TokenPayload | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+
+    const [header, payload, signature] = parts;
+
+    // 解码 URL-safe base64
+    const fromBase64Url = (str: string) => {
+      const base64 = str
+        .replace(/-/g, '+')
+        .replace(/_/g, '/');
+      const padding = base64.length % 4;
+      return base64 + '='.repeat(padding === 0 ? 0 : 4 - padding);
+    };
+
+    const expectedSignature = crypto
+      .createHmac('sha256', JWT_SECRET)
+      .update(`${header}.${payload}`)
+      .digest('base64')
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=/g, '');
+
+    if (signature !== expectedSignature) return null;
+
+    const decodedPayload = fromBase64Url(payload);
+    const decoded = JSON.parse(Buffer.from(decodedPayload, 'base64').toString());
+
+    if (decoded.exp < Date.now()) return null;
+
+    return {
+      userId: decoded.sub,
+      openid: decoded.openid,
+    };
+  } catch {
+    return null;
+  }
+}
 
 /**
  * API 请求体接口
@@ -33,9 +88,38 @@ interface BlessingRequest {
  */
 export async function POST(req: NextRequest) {
   try {
+    // 检查是否为微信小程序访问
+    const userAgent = req.headers.get('user-agent') || '';
+    if (!userAgent.includes('MicroMessenger')) {
+      return NextResponse.json(
+        { error: "此应用仅支持微信小程序访问，请在微信中打开" },
+        { status: 403 }
+      );
+    }
+
+    // 从 Cookie 获取 token
+    const token = req.cookies.get('auth_token')?.value || req.headers.get('Authorization')?.replace('Bearer ', '');
+
+    if (!token) {
+      return NextResponse.json(
+        { error: '用户未登录' },
+        { status: 401 }
+      );
+    }
+
+    // 验证 token
+    const decoded = verifyToken(token);
+
+    if (!decoded) {
+      return NextResponse.json(
+        { error: '登录已过期' },
+        { status: 401 }
+      );
+    }
+
     // 解析请求体中的 JSON 数据
     const body: BlessingRequest = await req.json();
-    
+
     // 基础验证
     const validation = validateInput(body);
     if (!validation.valid) {
@@ -55,6 +139,33 @@ export async function POST(req: NextRequest) {
     
     // 调用 AI 服务生成祝福语
     const blessing = await generateBlessing(prompt);
+
+    // 获取用户信息
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('openid', decoded.openid)
+      .single();
+
+    if (userError || !user) {
+      // 如果用户不存在，但生成祝福语成功，仍返回祝福语，但不插入历史记录
+      console.warn('用户不存在，无法插入历史记录:', userError);
+      return NextResponse.json({ blessing });
+    }
+
+    // 插入历史记录
+    try {
+      await historyDb.addHistory({
+        user_id: user.id,
+        blessing,
+        occasion: body.occasion,
+        target_person: body.targetPerson,
+        style: body.style || '传统',
+      });
+    } catch (historyError) {
+      // 历史记录插入失败，但不影响祝福语生成
+      console.error('插入历史记录失败:', historyError);
+    }
 
     // 返回成功结果
     return NextResponse.json({ blessing });
