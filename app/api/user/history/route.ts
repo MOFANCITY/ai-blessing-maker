@@ -1,58 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase, historyDb } from '@/lib/supabase';
-import * as crypto from 'crypto';
+import { verifyToken } from '@/lib/auth';
 import { UserHistory } from '@/lib/types/auth';
-
-// JWT Secret
-const JWT_SECRET = process.env.JWT_SECRET || 'default-secret-change-in-production';
-
-/**
- * 验证用户 token
- */
-interface TokenPayload {
-  userId: string;
-  openid: string;
-}
-
-function verifyToken(token: string): TokenPayload | null {
-  try {
-    const parts = token.split('.');
-    if (parts.length !== 3) return null;
-
-    const [header, payload, signature] = parts;
-
-    // 解码 URL-safe base64
-    const fromBase64Url = (str: string) => {
-      const base64 = str
-        .replace(/-/g, '+')
-        .replace(/_/g, '/');
-      const padding = base64.length % 4;
-      return base64 + '='.repeat(padding === 0 ? 0 : 4 - padding);
-    };
-
-    const expectedSignature = crypto
-      .createHmac('sha256', JWT_SECRET)
-      .update(`${header}.${payload}`)
-      .digest('base64')
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_')
-      .replace(/=/g, '');
-
-    if (signature !== expectedSignature) return null;
-
-    const decodedPayload = fromBase64Url(payload);
-    const decoded = JSON.parse(Buffer.from(decodedPayload, 'base64').toString());
-
-    if (decoded.exp < Date.now()) return null;
-
-    return {
-      userId: decoded.sub,
-      openid: decoded.openid,
-    };
-  } catch {
-    return null;
-  }
-}
 
 /**
  * 获取用户历史记录
