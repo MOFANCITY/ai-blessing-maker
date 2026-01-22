@@ -32,7 +32,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     // 从 URL 获取参数
     const { searchParams } = new URL(request.url);
-    const limit = parseInt(searchParams.get('limit') || '50', 10);
+    const page = parseInt(searchParams.get('page') || '1', 10);
+    const pageSize = parseInt(searchParams.get('pageSize') || searchParams.get('limit') || '10', 10);
     const isStatsRequest = searchParams.get('stats') === 'true';
 
     // 获取用户信息
@@ -86,11 +87,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       });
     }
 
-    const history = await historyDb.getUserHistory(users.id, limit);
+    const { data: history, total } = await historyDb.getUserHistory(users.id, page, pageSize);
 
     return NextResponse.json({
       success: true,
-      history: history.map((item: UserHistory) => ({
+      data: history.map((item: UserHistory) => ({
         id: item.id,
         blessing: item.blessing,
         occasion: item.occasion,
@@ -98,6 +99,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         style: item.style,
         createdAt: item.createdAt,
       })),
+      pagination: {
+        page,
+        pageSize,
+        total,
+        totalPages: Math.ceil(total / pageSize),
+      },
     });
   } catch (error) {
     console.error('获取历史记录失败:', error);

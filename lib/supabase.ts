@@ -135,16 +135,32 @@ export const historyDb = {
   /**
    * 获取用户历史记录
    */
-  async getUserHistory(userId: string, limit = 50) {
+  async getUserHistory(userId: string, page = 1, pageSize = 10) {
+    // 计算 offset
+    const offset = (page - 1) * pageSize;
+
+    // 获取总数
+    const { count: total, error: countError } = await getSupabaseClient()
+      .from(TABLES.USER_HISTORY)
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', userId);
+
+    if (countError) throw countError;
+
+    // 获取分页数据
     const { data, error } = await getSupabaseClient()
       .from(TABLES.USER_HISTORY)
       .select('*')
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
-      .limit(limit);
-    
+      .range(offset, offset + pageSize - 1);
+
     if (error) throw error;
-    return data || [];
+
+    return {
+      data: data || [],
+      total: total || 0,
+    };
   },
   
   /**
