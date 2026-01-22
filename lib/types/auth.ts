@@ -85,6 +85,31 @@ export interface AuthenticatedBlessingRequest {
 }
 
 /**
+ * 用户资料更新请求
+ */
+export interface UserProfileUpdateRequest {
+  nickname?: string;
+  avatarUrl?: string;
+}
+
+/**
+ * 用户资料响应
+ */
+export interface UserProfileResponse {
+  success: boolean;
+  user: {
+    id: string;
+    openid: string;
+    unionid?: string;
+    nickname: string;
+    avatarUrl: string;
+    createdAt: string;
+    lastLoginAt: string;
+    totalBlessingsGenerated: number;
+  };
+}
+
+/**
  * API 错误响应
  */
 export interface ApiErrorResponse {
