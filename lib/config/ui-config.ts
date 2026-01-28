@@ -21,7 +21,7 @@ export const defaultUIConfig: UIConfig = {
     smartMode: true,
     templateMode: true,
     feedback: true,
-    showGenerateImageBtn: false
+    showGenerateImageBtn: true
   }
 };
 
