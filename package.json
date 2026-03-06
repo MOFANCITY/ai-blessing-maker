@@ -13,13 +13,15 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.90.0",
+    "@types/redis": "^4.0.10",
     "@vercel/analytics": "^1.5.0",
     "@vercel/kv": "^3.0.0",
     "@vercel/speed-insights": "^1.2.0",
     "axios": "^1.7.9",
     "next": "^15.3.4",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "redis": "^5.11.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.1",
