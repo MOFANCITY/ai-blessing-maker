@@ -37,33 +37,43 @@ interface BlessingRequest {
  */
 export async function POST(req: NextRequest) {
   try {
-    // 检查是否为微信小程序访问
-    const userAgent = req.headers.get('user-agent') || '';
-    if (!userAgent.includes('MicroMessenger')) {
-      return NextResponse.json(
-        { error: "此应用仅支持微信小程序访问，请在微信中打开" },
-        { status: 403 }
-      );
+    // 检查是否为微信小程序访问 - 仅在生产环境中启用
+    const isDevelopment = process.env.NODE_ENV === 'development';
+    if (!isDevelopment) {
+      const userAgent = req.headers.get('user-agent') || '';
+      if (!userAgent.includes('MicroMessenger')) {
+        return NextResponse.json(
+          { error: "此应用仅支持微信小程序访问，请在微信中打开" },
+          { status: 403 }
+        );
+      }
     }
 
-    // 从 Cookie 获取 token
-    const token = req.cookies.get('auth_token')?.value || req.headers.get('Authorization')?.replace('Bearer ', '');
+    // 从 Cookie 获取 token - 仅在生产环境中启用
+    let decoded;
+    if (!isDevelopment) {
+      const token = req.cookies.get('auth_token')?.value || req.headers.get('Authorization')?.replace('Bearer ', '');
 
-    if (!token) {
-      return NextResponse.json(
-        { error: '用户未登录' },
-        { status: 401 }
-      );
-    }
+      if (!token) {
+        return NextResponse.json(
+          { error: '用户未登录' },
+          { status: 401 }
+        );
+      }
 
-    // 验证 token
-    const decoded = verifyToken(token);
+      // 验证 token
+      decoded = verifyToken(token);
 
-    if (!decoded) {
-      return NextResponse.json(
-        { error: '登录已过期' },
-        { status: 401 }
-      );
+      if (!decoded) {
+        return NextResponse.json(
+          { error: '登录已过期' },
+          { status: 401 }
+        );
+      }
+    } else {
+      // 在开发环境中，创建一个模拟的解码用户对象
+      console.log('开发模式：跳过微信验证和认证');
+      decoded = { openid: 'dev_openid_12345' }; // 模拟用户ID
     }
 
     // 解析请求体中的 JSON 数据
@@ -90,11 +100,21 @@ export async function POST(req: NextRequest) {
     const blessing = await generateBlessing(prompt);
 
     // 获取用户信息
-    const { data: user, error: userError } = await supabase
-      .from('users')
-      .select('id')
-      .eq('openid', decoded.openid)
-      .single();
+    let user = null;
+    let userError = null;
+
+    if (!isDevelopment) {
+      ({ data: user, error: userError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('openid', decoded.openid)
+        .single());
+    } else {
+      // 在开发模式下，模拟一个用户对象而不依赖数据库
+      user = { id: 'dev_user_12345' };
+      userError = null;
+      console.log('开发模式：使用模拟用户数据');
+    }
 
     if (userError || !user) {
       // 如果用户不存在，但生成祝福语成功，仍返回祝福语，但不插入历史记录

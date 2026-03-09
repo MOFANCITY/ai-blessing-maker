@@ -19,9 +19,17 @@ const nextConfig = {
     ignoreDuringBuilds: true,
   },
   webpack: (config) => {
-    config.plugins.push(new NodePolyfillPlugin());
-    config.resolve.fallback = {
-      ...config.resolve.fallback,
+    // 首先配置节点解析
+    if (!config.resolve) {
+      config.resolve = {};
+    }
+
+    if (!config.resolve.fallback) {
+      config.resolve.fallback = {};
+    }
+
+    // 添加必要的回退
+    Object.assign(config.resolve.fallback, {
       crypto: require.resolve('crypto-browserify'),
       stream: require.resolve('stream-browserify'),
       buffer: require.resolve('buffer'),
@@ -33,40 +41,69 @@ const nextConfig = {
       timers: false,
       timersPromises: false,
       diagnostics_channel: false,
-      'node:crypto': require.resolve('crypto-browserify'),
-      'node:stream': require.resolve('stream-browserify'),
+    });
+
+    // 添加别名以解决模块解析问题
+    if (!config.resolve.alias) {
+      config.resolve.alias = {};
+    }
+
+    Object.assign(config.resolve.alias, {
+      buffer: require.resolve('buffer'),
       'node:buffer': require.resolve('buffer'),
       'node:util': require.resolve('util'),
-      'node:net': false,
-      'node:tls': false,
-      'node:dns': false,
-      'node:fs': false,
-      'node:timers': false,
-      'node:timers/promises': false,
-      'node:diagnostics_channel': false,
-    };
-    config.resolve.alias = {
-      ...config.resolve.alias,
-      'node:crypto': require.resolve('crypto-browserify'),
       'node:stream': require.resolve('stream-browserify'),
-      'node:buffer': require.resolve('buffer'),
-      'node:util': require.resolve('util'),
-      'node:net': false,
-      'node:tls': false,
-      'node:dns': false,
-      'node:fs': false,
-      'node:timers': false,
-      'node:timers/promises': false,
-      'node:diagnostics_channel': false,
-    };
+      'node:crypto': require.resolve('crypto-browserify'),
+    });
+
+    // 配置模块规则，解决buffer模块的特殊处理
+    if (!config.module) {
+      config.module = {};
+    }
+
+    if (!config.module.rules) {
+      config.module.rules = [];
+    }
+
+    // 添加规则处理buffer相关模块
+    config.module.rules.push({
+      test: /node_modules\/node-stdlib-browser\/node_modules\/buffer/,
+      use: {
+        loader: 'babel-loader',
+        options: {
+          presets: [
+            ['@babel/preset-env', { targets: 'defaults' }]
+          ],
+          plugins: [
+            '@babel/plugin-transform-modules-commonjs'
+          ]
+        }
+      }
+    });
+
+    // 为node模块添加空加载器
     config.module.rules.push({
       test: /node:/,
       use: 'null-loader',
     });
+
     config.module.rules.push({
       test: /@redis\/client/,
       use: 'null-loader',
     });
+
+    // 为特定的buffer相关模块添加特殊处理
+    config.module.rules.push({
+      test: /buffer/,
+      issuer: /node-stdlib-browser/,
+      use: {
+        loader: 'babel-loader',
+        options: {
+          presets: ['@babel/preset-env']
+        }
+      }
+    });
+
     return config;
   },
 };
