@@ -37,6 +37,13 @@ pnpm test:coverage  # 查看 coverage/lcov-report/index.html
 
 ## 🏗️ 项目架构
 
+### 项目结构说明
+
+整个产品为前后端分离。
+
+1. server端项目: /Users/peng/IdeaProjects/github/ai-blessing-maker
+2. 小程序项目地址: /Users/peng/IdeaProjects/github/blessing-elf-wechat-miniprogram
+
 ### 技术栈 (生产级别)
 - **框架**: Next.js 15.3.4 with App Router + TypeScript 5.7.2 (strict模式)
 - **样式**: Tailwind CSS 3.4.17 + PostCSS
