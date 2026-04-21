@@ -9,7 +9,7 @@ import { createBlessingPrompt } from "@/lib/prompt-templates";
 // 输入验证和清理函数
 import { validateInput, cleanText } from "@/lib/validation";
 // 数据库客户端
-import { supabase, historyDb } from "@/lib/supabase";
+import { db, historyDb } from "@/lib/db";
 // JWT验证相关
 import { verifyToken } from "@/lib/auth";
 
@@ -104,11 +104,12 @@ export async function POST(req: NextRequest) {
     let userError = null;
 
     if (!isDevelopment) {
-      ({ data: user, error: userError } = await supabase
-        .from('users')
-        .select('id')
-        .eq('openid', decoded.openid)
-        .single());
+      const result = await db.execute({
+        sql: 'SELECT id FROM users WHERE openid = ? LIMIT 1',
+        args: [decoded.openid],
+      });
+      user = result.rows[0] ?? null;
+      userError = user ? null : 'not found';
     } else {
       // 在开发模式下，模拟一个用户对象而不依赖数据库
       user = { id: 'dev_user_12345' };
