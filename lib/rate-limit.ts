@@ -1,19 +1,4 @@
-import { createClient } from 'redis';
-
-// 创建Redis客户端实例
-const redisClient = createClient({
-  url: process.env.KV_REDIS_URL || 'redis://localhost:6379'
-});
-
-// 连接Redis客户端
-redisClient.on('error', (err) => {
-  console.error('Redis Client Error:', err);
-});
-
-// 连接到Redis
-if (!redisClient.isOpen) {
-  redisClient.connect().catch(console.error);
-}
+import { kv } from '@vercel/kv';
 
 /**
  * 速率限制配置
@@ -143,24 +128,12 @@ function checkMemoryRateLimit(identifier: string): RateLimitResult {
  * @returns 限制检查结果
  */
 export async function checkRateLimit(identifier: string): Promise<RateLimitResult> {
-  // 如果Redis客户端未连接，则使用内存限制
-  if (!redisClient.isOpen) {
-    console.warn('Redis未连接，使用内存速率限制');
-    return checkMemoryRateLimit(identifier);
-  }
-
   try {
     const now = Math.floor(Date.now() / 1000);
 
-    // 检查分钟级限制
     const minuteKey = `rate_limit:minute:${identifier}:${Math.floor(now / RATE_LIMIT_CONFIG.minute.window)}`;
-    // 使用INCR命令增加计数并获取当前值
-    const minuteCount = await redisClient.incr(minuteKey);
-
-    // 为新键设置过期时间
-    if (minuteCount === 1) {
-      await redisClient.expire(minuteKey, RATE_LIMIT_CONFIG.minute.window);
-    }
+    const minuteCount = await kv.incr(minuteKey);
+    if (minuteCount === 1) await kv.expire(minuteKey, RATE_LIMIT_CONFIG.minute.window);
 
     if (minuteCount > RATE_LIMIT_CONFIG.minute.max) {
       return {
@@ -172,25 +145,20 @@ export async function checkRateLimit(identifier: string): Promise<RateLimitResul
       };
     }
 
-    // 检查日级限制
-    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD格式
+    const today = new Date().toISOString().split('T')[0];
     const dailyKey = `rate_limit:daily:${identifier}:${today}`;
-    const dailyCount = await redisClient.incr(dailyKey);
-
-    // 为新键设置过期时间（到第二天）
+    const dailyCount = await kv.incr(dailyKey);
     if (dailyCount === 1) {
       const tomorrow = new Date();
       tomorrow.setDate(tomorrow.getDate() + 1);
       tomorrow.setHours(0, 0, 0, 0);
-      const secondsUntilTomorrow = Math.floor((tomorrow.getTime() - Date.now()) / 1000);
-      await redisClient.expire(dailyKey, secondsUntilTomorrow);
+      await kv.expire(dailyKey, Math.floor((tomorrow.getTime() - Date.now()) / 1000));
     }
 
     if (dailyCount > RATE_LIMIT_CONFIG.daily.max) {
       const tomorrow = new Date();
       tomorrow.setDate(tomorrow.getDate() + 1);
       tomorrow.setHours(0, 0, 0, 0);
-
       return {
         success: false,
         limit: RATE_LIMIT_CONFIG.daily.max,
@@ -206,24 +174,9 @@ export async function checkRateLimit(identifier: string): Promise<RateLimitResul
       remaining: RATE_LIMIT_CONFIG.minute.max - minuteCount,
       resetTime: (Math.floor(now / RATE_LIMIT_CONFIG.minute.window) + 1) * RATE_LIMIT_CONFIG.minute.window
     };
-
   } catch (error) {
     console.error('速率限制检查失败:', error);
-
-    // 开发环境降级为内存限制，生产环境拒绝请求
-    if (isDevelopment) {
-      console.warn('Redis不可用，降级为内存限制');
-      return checkMemoryRateLimit(identifier);
-    }
-
-    // 生产环境保持严格策略
-    return {
-      success: false,
-      limit: 0,
-      remaining: 0,
-      resetTime: Math.floor(Date.now() / 1000) + 60,
-      error: '服务暂时不可用，请稍后重试'
-    };
+    return checkMemoryRateLimit(identifier);
   }
 }
 
@@ -233,64 +186,32 @@ export async function checkRateLimit(identifier: string): Promise<RateLimitResul
  * @returns 当前限制状态
  */
 export async function getRateLimitStatus(identifier: string): Promise<RateLimitResult> {
-  // 如果Redis客户端未连接，则返回内存状态
-  if (!redisClient.isOpen) {
-    const now = Math.floor(Date.now() / 1000);
-    const key = `${identifier}:${Math.floor(now / RATE_LIMIT_CONFIG.minute.window)}`;
-    const cached = memoryCache.get(key);
-    const count = cached?.count || 0;
-
-    return {
-      success: count < RATE_LIMIT_CONFIG.minute.max,
-      limit: RATE_LIMIT_CONFIG.minute.max,
-      remaining: Math.max(0, RATE_LIMIT_CONFIG.minute.max - count),
-      resetTime: (Math.floor(now / RATE_LIMIT_CONFIG.minute.window) + 1) * RATE_LIMIT_CONFIG.minute.window
-    };
-  }
-
   try {
     const now = Math.floor(Date.now() / 1000);
 
-    // 获取当前分钟的计数
     const minuteKey = `rate_limit:minute:${identifier}:${Math.floor(now / RATE_LIMIT_CONFIG.minute.window)}`;
-    const minuteCount = await redisClient.get(minuteKey);
-    const numericMinuteCount = minuteCount ? parseInt(minuteCount) : 0;
+    const minuteCount = Number(await kv.get(minuteKey) ?? 0);
 
-    // 获取当前日期的计数
     const today = new Date().toISOString().split('T')[0];
     const dailyKey = `rate_limit:daily:${identifier}:${today}`;
-    const dailyCount = await redisClient.get(dailyKey);
-    const numericDailyCount = dailyCount ? parseInt(dailyCount) : 0;
-
-    const minuteRemaining = Math.max(0, RATE_LIMIT_CONFIG.minute.max - numericMinuteCount);
-    const dailyRemaining = Math.max(0, RATE_LIMIT_CONFIG.daily.max - numericDailyCount);
+    const dailyCount = Number(await kv.get(dailyKey) ?? 0);
 
     return {
-      success: numericMinuteCount < RATE_LIMIT_CONFIG.minute.max && numericDailyCount < RATE_LIMIT_CONFIG.daily.max,
+      success: minuteCount < RATE_LIMIT_CONFIG.minute.max && dailyCount < RATE_LIMIT_CONFIG.daily.max,
       limit: RATE_LIMIT_CONFIG.minute.max,
-      remaining: Math.min(minuteRemaining, dailyRemaining),
+      remaining: Math.min(
+        Math.max(0, RATE_LIMIT_CONFIG.minute.max - minuteCount),
+        Math.max(0, RATE_LIMIT_CONFIG.daily.max - dailyCount)
+      ),
       resetTime: (Math.floor(now / RATE_LIMIT_CONFIG.minute.window) + 1) * RATE_LIMIT_CONFIG.minute.window
     };
-
   } catch (error) {
     console.error('获取速率限制状态失败:', error);
-
-    // 开发环境降级处理
-    if (isDevelopment) {
-      return {
-        success: true,
-        limit: RATE_LIMIT_CONFIG.minute.max,
-        remaining: RATE_LIMIT_CONFIG.minute.max,
-        resetTime: Math.floor(Date.now() / 1000) + 60
-      };
-    }
-
     return {
-      success: false,
-      limit: 0,
-      remaining: 0,
-      resetTime: Math.floor(Date.now() / 1000) + 60,
-      error: '无法获取限制状态'
+      success: true,
+      limit: RATE_LIMIT_CONFIG.minute.max,
+      remaining: RATE_LIMIT_CONFIG.minute.max,
+      resetTime: Math.floor(Date.now() / 1000) + 60
     };
   }
 }
