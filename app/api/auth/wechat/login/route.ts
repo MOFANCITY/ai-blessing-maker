@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { WechatLoginRequest, UserLoginResponse } from '@/lib/types/auth';
-import { userDb } from '@/lib/supabase';
+import { userDb } from '@/lib/db';
 import { verifyToken, generateToken } from '@/lib/auth';
 import * as crypto from 'crypto';
 

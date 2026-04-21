@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/db';
 import { verifyToken } from '@/lib/auth';
 
 /**
@@ -28,14 +28,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // 获取用户信息
-    const { data: user, error: userError } = await supabase
-      .from('users')
-      .select('id, openid, unionid, nickname, avatar_url, created_at, last_login_at, total_blessings_generated')
-      .eq('openid', decoded.openid)
-      .single();
+    const result = await db.execute({
+      sql: 'SELECT id, openid, unionid, nickname, avatar_url, created_at, last_login_at, total_blessings_generated FROM users WHERE openid = ? LIMIT 1',
+      args: [decoded.openid],
+    });
+    const user = result.rows[0];
 
-    if (userError || !user) {
+    if (!user) {
       return NextResponse.json(
         { error: '用户不存在' },
         { status: 404 }
@@ -125,16 +124,13 @@ export async function PUT(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // 更新用户信息
-    const { data: updatedUser, error: updateError } = await supabase
-      .from('users')
-      .update(updateData)
-      .eq('openid', decoded.openid)
-      .select('id, openid, unionid, nickname, avatar_url, created_at, last_login_at, total_blessings_generated')
-      .single();
+    const updateResult = await db.execute({
+      sql: `UPDATE users SET ${Object.keys(updateData).map(k => `${k} = ?`).join(', ')} WHERE openid = ? RETURNING id, openid, unionid, nickname, avatar_url, created_at, last_login_at, total_blessings_generated`,
+      args: [...Object.values(updateData), decoded.openid],
+    });
+    const updatedUser = updateResult.rows[0];
 
-    if (updateError) {
-      console.error('更新用户资料失败:', updateError);
+    if (!updatedUser) {
       return NextResponse.json(
         { error: '更新用户资料失败' },
         { status: 500 }

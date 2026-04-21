@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase, historyDb } from '@/lib/supabase';
+import { db, historyDb } from '@/lib/db';
 import { verifyToken } from '@/lib/auth';
 import { UserHistory } from '@/lib/types/auth';
 
@@ -37,13 +37,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const isStatsRequest = searchParams.get('stats') === 'true';
 
     // 获取用户信息
-    const { data: users, error: userError } = await supabase
-      .from('users')
-      .select('id')
-      .eq('openid', decoded.openid)
-      .single();
+    const userResult = await db.execute({
+      sql: 'SELECT id FROM users WHERE openid = ? LIMIT 1',
+      args: [decoded.openid],
+    });
+    const users = userResult.rows[0];
 
-    if (userError || !users) {
+    if (!users) {
       return NextResponse.json(
         { error: '用户不存在' },
         { status: 404 }
@@ -52,39 +52,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     // 如果是统计请求，返回统计数据
     if (isStatsRequest) {
-      // 获取总数
-      const { count: totalCount, error: totalError } = await supabase
-        .from('user_history')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', users.id);
-
-      if (totalError) {
-        throw totalError;
-      }
-
-      // 获取当月数量
-      const now = new Date();
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
-
-      const { count: monthlyCount, error: monthlyError } = await supabase
-        .from('user_history')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', users.id)
-        .gte('created_at', startOfMonth.toISOString())
-        .lte('created_at', endOfMonth.toISOString());
-
-      if (monthlyError) {
-        throw monthlyError;
-      }
-
-      return NextResponse.json({
-        success: true,
-        stats: {
-          total: totalCount || 0,
-          monthly: monthlyCount || 0,
-        },
-      });
+      const stats = await historyDb.getStats(String(users.id));
+      return NextResponse.json({ success: true, stats });
     }
 
     const { data: history, total } = await historyDb.getUserHistory(users.id, page, pageSize);
@@ -152,13 +121,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     // 获取用户信息
-    const { data: user, error: userError } = await supabase
-      .from('users')
-      .select('id')
-      .eq('openid', decoded.openid)
-      .single();
+    const userResult = await db.execute({
+      sql: 'SELECT id FROM users WHERE openid = ? LIMIT 1',
+      args: [decoded.openid],
+    });
+    const user = userResult.rows[0];
     
-    if (userError || !user) {
+    if (!user) {
       return NextResponse.json(
         { error: '用户不存在' },
         { status: 404 }
@@ -167,7 +136,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     // 添加历史记录
     const historyItem = await historyDb.addHistory({
-      user_id: user.id,
+      user_id: String(user.id),
       blessing,
       occasion,
       target_person: targetPerson,
@@ -232,11 +201,11 @@ export async function DELETE(request: NextRequest): Promise<NextResponse> {
     }
 
     // 获取用户信息
-    const { data: user } = await supabase
-      .from('users')
-      .select('id')
-      .eq('openid', decoded.openid)
-      .single();
+    const userResult = await db.execute({
+      sql: 'SELECT id FROM users WHERE openid = ? LIMIT 1',
+      args: [decoded.openid],
+    });
+    const user = userResult.rows[0];
     
     if (!user) {
       return NextResponse.json(
@@ -246,7 +215,7 @@ export async function DELETE(request: NextRequest): Promise<NextResponse> {
     }
 
     // 删除历史记录
-    await historyDb.deleteHistory(historyId, user.id);
+    await historyDb.deleteHistory(historyId, String(user.id));
 
     return NextResponse.json({
       success: true,
