@@ -75,7 +75,7 @@ export function verifyToken(token: string): TokenPayload | null {
     const decodedPayload = fromBase64Url(payload);
     const decoded = JSON.parse(Buffer.from(decodedPayload, 'base64').toString());
 
-    if (decoded.exp < Date.now()) return null;
+    if (decoded.exp < Math.floor(Date.now() / 1000)) return null;
 
     return {
       userId: decoded.sub,
