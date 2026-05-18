@@ -42,10 +42,6 @@ next-env.d.ts
 # pnpm
 pnpm-debug.log*
 
-# claude code
-/.claude/
-.claude/settings*
-
 # test scripts
 test-security.sh
 
