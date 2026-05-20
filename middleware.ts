@@ -17,8 +17,12 @@ export async function middleware(req: NextRequest) {
     );
   }
 
-  // 只对祝福API进行速率限制
-  if (!req.nextUrl.pathname.startsWith("/api/blessing")) {
+  // 对祝福与对联 API 进行速率限制
+  const isRateLimitedApi =
+    req.nextUrl.pathname.startsWith("/api/blessing") ||
+    req.nextUrl.pathname.startsWith("/api/couplet");
+
+  if (!isRateLimitedApi) {
     return NextResponse.next();
   }
 

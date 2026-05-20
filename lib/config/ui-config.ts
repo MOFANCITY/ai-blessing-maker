@@ -9,6 +9,7 @@ export interface UIConfig {
     templateMode: boolean;     // 模板模式开关
     feedback: boolean;         // 反馈功能开关
     showGenerateImageBtn: boolean; // 生成图片按钮显示开关
+    coupletMode: boolean;      // 对联「对下联」功能开关
   }
 }
 
@@ -21,7 +22,8 @@ export const defaultUIConfig: UIConfig = {
     smartMode: true,
     templateMode: true,
     feedback: true,
-    showGenerateImageBtn: true
+    showGenerateImageBtn: true,
+    coupletMode: true,
   }
 };
 

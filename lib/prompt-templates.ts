@@ -96,3 +96,54 @@ export function createBlessingPrompt(options: BlessingRequest): string {
     return createTemplatePrompt(options);
   }
 }
+
+/**
+ * 生成对联上联的提示词
+ */
+export function createCoupletUpperPrompt(theme: string): string {
+  return `
+# Role
+你是一位擅长创作喜庆中文春联的文案专家，熟悉常见节日与人生场合的联语风格。
+
+# Task
+请为「${theme}」主题创作一副春联的**上联**（仅上联一行）。
+
+# Requirements
+1. 字数：7 个汉字（不含标点、空格）。
+2. 内容积极喜庆，适合张贴门口或送给亲友，避免消极、迷信低俗、敏感政治内容。
+3. 语言典雅但不晦涩，中老年读者能看懂。
+4. 为下联留出对仗空间：词性、意境可与之呼应，但不要写出下联。
+5. 不要输出横批、解释、标点或「上联：」等前缀。
+
+# Output
+只输出上联七个字，一行，无其他文字。`;
+}
+
+/**
+ * 评下联的提示词（要求严格 JSON）
+ */
+export function createCoupletReviewPrompt(
+  upperLine: string,
+  lowerLine: string
+): string {
+  return `
+# Role
+你是一位和蔼的中文春联老师傅，擅长用大白话点评对联，鼓励初学者。
+
+# Task
+点评用户写的下联是否配得上这条上联。
+
+- 上联：${upperLine}
+- 下联：${lowerLine}
+
+# Requirements
+1. 从三方面简评：字数是否相配、词性/结构是否大致对仗、意境是否贴切。
+2. 不苛求严格平仄，语气鼓励为主，避免打击创作热情。
+3. 评语口语化，每条建议不超过 20 字，不用过多文言术语。
+4. 若内容积极且无违禁，canShare 为 true；仅当含明显不当内容时 canShare 为 false。
+5. score 为 1-5 的整数（5 最好）。
+
+# Output
+只输出一个 JSON 对象，不要 markdown 代码块，格式如下：
+{"score":4,"summary":"一句话总评","strengths":["优点1"],"suggestions":["建议1"],"canShare":true}`;
+}
