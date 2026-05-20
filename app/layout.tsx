@@ -7,9 +7,10 @@ import "./globals.css";
 // SEO 元数据配置
 // 定义网站标题、描述、关键词和图标
 export const metadata: Metadata = {
-  title: "AI祝福语生成器",
-  description: "使用AI智能生成个性化祝福语，支持多种场景、节日和目标人群选择",
-  keywords: "祝福语,AI生成,个性化,节日祝福,生日祝福",
+  title: "妙笔祝福 — AI祝福语生成器",
+  description:
+    "妙笔祝福后端与演示：AI智能生成个性化中文祝福语，支持多种场景、节日和目标人群。登录用户的祝福记录会保存在账户中。",
+  keywords: "妙笔祝福,祝福语,AI生成,个性化,节日祝福,生日祝福",
   icons: {
     icon: "/favicon.svg",
   },
@@ -39,11 +40,11 @@ export default function RootLayout({
             <div className="max-w-6xl mx-auto px-4">
               {/* 主标题 */}
               <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-black text-center festive-title mb-4">
-                🎊 AI祝福语生成器 🎊
+                🎊 妙笔祝福 · AI祝福语生成器 🎊
               </h1>
               {/* 副标题 */}
               <p className="text-center text-sm sm:text-base md:text-lg lg:text-xl font-semibold text-white drop-shadow-lg">
-                ✨ 智能生成个性化祝福语，让每一份祝福都独一无二 ✨
+                ✨ 不会写祝福，也能说出心里话 ✨
               </p>
               {/* 装饰性动画表情，不参与屏幕阅读器 */}
               <div className="text-center mt-4 space-x-2" aria-hidden="true">
@@ -96,11 +97,11 @@ export default function RootLayout({
             </div>
             {/* 版权信息 */}
             <p className="text-lg font-semibold drop-shadow-lg">
-              &copy; 2025 AI祝福语生成器 - 让祝福更有温度 🌟
+              &copy; 2025 妙笔祝福 - 让祝福更有温度 🌟
             </p>
             {/* 隐私声明 */}
             <p className="text-sm mt-2 opacity-90">
-              您的输入内容仅用于生成祝福语，不会被存储或记录 ❤️ 项目已开源：
+              祝福语用于 AI 生成；登录用户的祝福记录会保存在您的账户中，便于查看历史。未登录访客内容不长期保存。 ❤️ 项目已开源：
               <a
                 href="https://github.com/farion1231/ai-blessing-maker"
                 target="_blank"

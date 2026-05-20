@@ -1,6 +1,9 @@
-# 🎊 AI 祝福语生成器
+# 🎊 妙笔祝福 — AI 祝福语生成器（后端 / Web 演示）
 
-基于 Next.js 15 + TypeScript 构建的智能祝福语生成应用，支持多 AI 供应商切换，为不同场景和节日生成个性化祝福语。
+基于 Next.js 15 + TypeScript 构建的 **妙笔祝福** 产品后端与 Web 演示，为微信小程序 [`blessing-elf`](../blessing-elf/) 提供 API。支持多 AI 供应商切换，为不同场景和节日生成个性化中文祝福语。
+
+> **产品品牌：** 妙笔祝福 · Tagline：不会写祝福，也能说出心里话  
+> **小程序介绍文案：** 见 [`blessing-elf/doc/MINI_PROGRAM_STORE.md`](../blessing-elf/doc/MINI_PROGRAM_STORE.md)
 
 ## ✨ 核心功能
 
