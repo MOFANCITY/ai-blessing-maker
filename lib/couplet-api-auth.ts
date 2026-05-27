@@ -3,7 +3,7 @@ import { verifyToken } from "@/lib/auth";
 
 export interface CoupletAuthContext {
   isDevelopment: boolean;
-  decoded: { openid: string };
+  openid: string;
 }
 
 export function resolveCoupletAuth(req: NextRequest): CoupletAuthContext | null {
@@ -17,7 +17,7 @@ export function resolveCoupletAuth(req: NextRequest): CoupletAuthContext | null 
   }
 
   if (isDevelopment) {
-    return { isDevelopment: true, decoded: { openid: "dev_openid_12345" } };
+    return { isDevelopment: true, openid: "dev_openid_12345" };
   }
 
   const token =
@@ -33,5 +33,5 @@ export function resolveCoupletAuth(req: NextRequest): CoupletAuthContext | null 
     return null;
   }
 
-  return { isDevelopment: false, decoded };
+  return { isDevelopment: false, openid: decoded.openid };
 }
