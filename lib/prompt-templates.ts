@@ -99,8 +99,20 @@ export function createBlessingPrompt(options: BlessingRequest): string {
 
 /**
  * 生成对联上联的提示词
+ * @param theme - 对联主题
+ * @param difficulty - 难度等级 ('simple' | 'medium' | 'hard')，影响字数范围
  */
-export function createCoupletUpperPrompt(theme: string): string {
+export function createCoupletUpperPrompt(theme: string, difficulty?: 'simple' | 'medium' | 'hard'): string {
+  // 根据难度确定字数范围
+  const difficultyMap: Record<string, { min: number; max: number; desc: string }> = {
+    'simple': { min: 4, max: 5, desc: '4-5' },
+    'medium': { min: 6, max: 8, desc: '6-8' },
+    'hard': { min: 9, max: 14, desc: '9-14' }
+  };
+
+  const targetDifficulty = difficultyMap[difficulty || 'medium'];
+  const charRange = `${targetDifficulty.min}-${targetDifficulty.max}`;
+
   return `
 # Role
 你是一位擅长创作中文对联的文案专家，熟悉常见节日、日常生活与人生场合的联语风格。
@@ -109,23 +121,37 @@ export function createCoupletUpperPrompt(theme: string): string {
 为「${theme}」主题创作一副对联的**上联**（仅上联一行）。
 
 # Requirements
-1. 字数：7 个汉字（不含标点、空格）。
+1. 字数：${charRange} 个汉字（不含标点、空格）。字数必须严格在这个范围内。
 2. 内容积极，适合送给亲友，不涉及政治、暴力、低俗、迷信等敏感内容。
 3. 语言典雅但不晦涩，中老年读者能看懂。
-4. 字数必须严格 7 个汉字，多一个字少一个字都不行。为下联留出对仗空间：词性、意境可与之呼应，但不要写出下联。
-5. 不要输出横批、解释。只输出 7 个汉字本身，不要任何标点符号、引号、序号、前缀（如「上联：」）、后缀或解释文字。
+4. 为下联留出对仗空间：词性、意境可与之呼应，但不要写出下联。
+5. 不要输出横批、解释。只输出 ${charRange} 个汉字本身，不要任何标点符号、引号、序号、前缀（如「上联：」）、后缀或解释文字。
 
 # Output
-只输出 7 个汉字，一行，无其他任何文字。`;
+只输出 ${charRange} 个汉字，一行，无其他任何文字。`;
 }
 
 /**
  * 评下联的提示词（要求严格 JSON）
+ * @param upperLine - 上联内容
+ * @param lowerLine - 下联内容
+ * @param difficulty - 难度等级，影响评标准
  */
 export function createCoupletReviewPrompt(
   upperLine: string,
-  lowerLine: string
+  lowerLine: string,
+  difficulty?: 'simple' | 'medium' | 'hard'
 ): string {
+  // 根据难度确定字数范围，用于评下联
+  const difficultyMap: Record<string, { min: number; max: number; desc: string }> = {
+    'simple': { min: 4, max: 5, desc: '4-5' },
+    'medium': { min: 6, max: 8, desc: '6-8' },
+    'hard': { min: 9, max: 14, desc: '9-14' }
+  };
+
+  const targetDifficulty = difficultyMap[difficulty || 'medium'];
+  const charRange = `${targetDifficulty.min}-${targetDifficulty.max}`;
+
   return `
 # Role
 你是一位和蔼的中文对联老师傅，擅长用大白话点评对联，鼓励初学者。你既能欣赏传统工整的对仗，也乐见年轻人以幽默诙谐的方式玩对联——哪怕下联不太合规矩，只要押韵有趣、心意到了，你也会笑着夸一句"有意思"。
@@ -133,19 +159,20 @@ export function createCoupletReviewPrompt(
 # Task
 点评用户写的下联是否配得上这条上联。
 
-- 上联：${upperLine}
-- 下联：${lowerLine}
+- 上联（${charRange}字）：${upperLine}
+- 下联（应为${charRange}字）：${lowerLine}
 
 # Requirements
-1. 先判断下联风格：是传统工整型还是诙谐搞笑型。两种风格都认真点评，不要因风格不同而否定用户。
-2. 从三方面简评：字数是否相配、词性/结构是否大致对仗、意境是否贴切。
-3. 诙谐搞笑型的下联（如押韵、谐音梗、搞笑呼应）：重点肯定其趣味性和创意，不苛求传统对仗和平仄，语气可以轻松幽默，像朋友间开玩笑。
-4. 随意发挥型的下联（如个性化的表达、独特的创意）：可以适当给予评价，像私塾老先生对孩童般宽容，鼓励用户的创作热情。
-4. 不苛求严格平仄，语气鼓励为主，避免打击创作热情。
-5. 评语口语化，每条建议不超过 20 字，不用过多文言术语。
-6. canShare 判断：下联不含攻击性、低俗、政治敏感、暴力内容时 canShare 为 true；否则为 false。诙谐搞笑但无害的内容完全可以分享。
-7. score 为 1-5 的整数（5 最好）。诙谐搞笑型只要有趣、押韵、无害，可以给到 3 分。
-8. summary 不超过 20 字。
+1. 字数要求：下联应为 ${charRange} 个汉字，与上联相配。字数不符时要特别指出，但不要因此过度扣分。
+2. 先判断下联风格：是传统工整型还是诙谐搞笑型。两种风格都认真点评，不要因风格不同而否定用户。
+3. 从三方面简评：字数是否相配、词性/结构是否大致对仗、意境是否贴切。
+4. 诙谐搞笑型的下联（如押韵、谐音梗、搞笑呼应）：重点肯定其趣味性和创意，不苛求传统对仗和平仄，语气可以轻松幽默，像朋友间开玩笑。
+5. 随意发挥型的下联（如个性化的表达、独特的创意）：可以适当给予评价，像私塾老先生对孩童般宽容，鼓励用户的创作热情。
+6. 不苛求严格平仄，语气鼓励为主，避免打击创作热情。
+7. 评语口语化，每条建议不超过 20 字，不用过多文言术语。
+8. canShare 判断：下联不含攻击性、低俗、政治敏感、暴力内容时 canShare 为 true；否则为 false。诙谐搞笑但无害的内容完全可以分享。
+9. score 为 1-5 的整数（5 最好）。诙谐搞笑型只要有趣、押韵、无害，可以给到 3 分。
+10. summary 不超过 20 字。
 
 # Output
 直接输出一个 JSON 对象，不要任何解释文字，不要 markdown 代码块标记（\`\`\`），不要多余文字。格式如下：

@@ -125,6 +125,15 @@ export const coupletDb = {
     return result.rows[0];
   },
 
+  // 获取单条对联记录
+  async getCoupletRecord(recordId: number) {
+    const result = await db.execute({
+      sql: 'SELECT * FROM couplet_records WHERE id = ? LIMIT 1',
+      args: [recordId],
+    });
+    return result.rows[0] ?? null;
+  },
+
   // 更新对联记录评分
   async updateCoupletScore(recordId: number, score: number, reviewSummary: string, canShare: boolean) {
     const result = await db.execute({

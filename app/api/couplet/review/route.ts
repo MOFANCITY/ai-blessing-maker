@@ -34,9 +34,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: validation.error }, { status: 400 });
     }
 
+    // 如果有 recordId，从数据库获取难度信息
+    let difficulty: 'simple' | 'medium' | 'hard' | undefined = 'medium';
+    if (validation.recordId) {
+      const record = await coupletDb.getCoupletRecord(validation.recordId);
+      if (record && record.difficulty) {
+        difficulty = record.difficulty as 'simple' | 'medium' | 'hard';
+      }
+    }
+
     const prompt = createCoupletReviewPrompt(
       validation.upperLine!,
-      validation.lowerLine!
+      validation.lowerLine!,
+      difficulty
     );
     const raw = await generateBlessing(prompt);
     const review = parseCoupletReviewJson(raw);

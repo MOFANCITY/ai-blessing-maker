@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: validation.error }, { status: 400 });
     }
 
-    const prompt = createCoupletUpperPrompt(validation.theme!);
+    const prompt = createCoupletUpperPrompt(validation.theme!, validation.difficulty);
     const raw = await generateBlessing(prompt);
     const upperLine = normalizeUpperLineFromAI(raw);
 
