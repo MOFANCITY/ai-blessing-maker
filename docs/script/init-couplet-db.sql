@@ -16,10 +16,11 @@ CREATE TABLE IF NOT EXISTS couplet_records (
   shared_at TIMESTAMP,
   created_at TIMESTAMP NOT NULL,
   updated_at TIMESTAMP,
-  FOREIGN KEY (openid) REFERENCES users(openid),
-  INDEX idx_openid_created (openid, created_at),
-  INDEX idx_score_shared (score, is_shared)
+  FOREIGN KEY (openid) REFERENCES users(openid)
 );
+
+CREATE INDEX IF NOT EXISTS idx_couplet_records_openid_created ON couplet_records(openid, created_at);
+CREATE INDEX IF NOT EXISTS idx_couplet_records_score_shared ON couplet_records(score, is_shared);
 
 -- 用户统计表
 CREATE TABLE IF NOT EXISTS user_stats (
@@ -41,9 +42,10 @@ CREATE TABLE IF NOT EXISTS points_log (
   points INTEGER NOT NULL,
   reason VARCHAR(100),
   created_at TIMESTAMP NOT NULL,
-  FOREIGN KEY (openid) REFERENCES users(openid),
-  INDEX idx_openid (openid)
+  FOREIGN KEY (openid) REFERENCES users(openid)
 );
+
+CREATE INDEX IF NOT EXISTS idx_points_log_openid ON points_log(openid);
 
 -- 成就系统表
 CREATE TABLE IF NOT EXISTS user_achievements (
@@ -53,7 +55,7 @@ CREATE TABLE IF NOT EXISTS user_achievements (
   progress INTEGER DEFAULT 0,
   unlocked_at TIMESTAMP,
   created_at TIMESTAMP NOT NULL,
-  UNIQUE KEY (openid, badge_id),
+  UNIQUE (openid, badge_id),
   FOREIGN KEY (openid) REFERENCES users(openid)
 );
 
@@ -78,10 +80,11 @@ CREATE TABLE IF NOT EXISTS user_daily_records (
   shared_at TIMESTAMP,
   created_at TIMESTAMP NOT NULL,
   updated_at TIMESTAMP,
-  UNIQUE KEY (openid, challenge_date),
-  FOREIGN KEY (openid) REFERENCES users(openid),
-  INDEX idx_date (challenge_date)
+  UNIQUE (openid, challenge_date),
+  FOREIGN KEY (openid) REFERENCES users(openid)
 );
+
+CREATE INDEX IF NOT EXISTS idx_user_daily_records_date ON user_daily_records(challenge_date);
 
 -- 周榜快照表（用于缓存计算结果）
 CREATE TABLE IF NOT EXISTS weekly_leaderboard_snapshots (
@@ -89,5 +92,5 @@ CREATE TABLE IF NOT EXISTS weekly_leaderboard_snapshots (
   week_start_date DATE NOT NULL,
   ranking_data JSON NOT NULL,
   calculated_at TIMESTAMP NOT NULL,
-  UNIQUE KEY (week_start_date)
+  UNIQUE (week_start_date)
 );
