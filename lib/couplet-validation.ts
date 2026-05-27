@@ -13,11 +13,13 @@ export type CoupletTheme = (typeof COUPLET_THEMES)[number];
 export interface CoupletUpperRequest {
   occasion?: string;
   theme?: string;
+  difficulty?: 'simple' | 'medium' | 'hard';
 }
 
 export interface CoupletReviewRequest {
   upperLine: string;
   lowerLine: string;
+  recordId?: number;
 }
 
 export interface CoupletReviewResult {
@@ -46,7 +48,7 @@ export function normalizeCoupletLine(text: string): string {
 
 export function validateCoupletUpperRequest(
   data: unknown
-): { valid: boolean; error?: string; theme?: string } {
+): { valid: boolean; error?: string; theme?: string; difficulty?: 'simple' | 'medium' | 'hard' } {
   if (!data || typeof data !== "object") {
     return { valid: false, error: "请求参数无效" };
   }
@@ -57,16 +59,20 @@ export function validateCoupletUpperRequest(
     ? rawTheme
     : "日常";
 
+  const difficulty = ['simple', 'medium', 'hard'].includes(input.difficulty || '') 
+    ? (input.difficulty as 'simple' | 'medium' | 'hard')
+    : 'medium';
+
   if (hasBlockedContent(rawTheme)) {
     return { valid: false, error: "主题内容不符合要求" };
   }
 
-  return { valid: true, theme };
+  return { valid: true, theme, difficulty };
 }
 
 export function validateCoupletReviewRequest(
   data: unknown
-): { valid: boolean; error?: string; upperLine?: string; lowerLine?: string } {
+): { valid: boolean; error?: string; upperLine?: string; lowerLine?: string; recordId?: number } {
   if (!data || typeof data !== "object") {
     return { valid: false, error: "请求参数无效" };
   }
@@ -74,6 +80,7 @@ export function validateCoupletReviewRequest(
   const input = data as CoupletReviewRequest;
   const upperLine = normalizeCoupletLine(String(input.upperLine || ""));
   const lowerLine = normalizeCoupletLine(String(input.lowerLine || ""));
+  const recordId = typeof input.recordId === 'number' ? input.recordId : undefined;
 
   if (!upperLine || !lowerLine) {
     return { valid: false, error: "请填写完整的上联和下联" };
@@ -99,7 +106,7 @@ export function validateCoupletReviewRequest(
     return { valid: false, error: "对联内容不符合要求" };
   }
 
-  return { valid: true, upperLine, lowerLine };
+  return { valid: true, upperLine, lowerLine, recordId };
 }
 
 export function normalizeUpperLineFromAI(raw: string): string {

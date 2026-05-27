@@ -7,6 +7,7 @@ import {
   validateCoupletUpperRequest,
 } from "@/lib/couplet-validation";
 import { resolveCoupletAuth } from "@/lib/couplet-api-auth";
+import { coupletDb, userStatsDb } from "@/lib/db";
 
 export async function POST(req: NextRequest) {
   try {
@@ -43,7 +44,18 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    return NextResponse.json({ upperLine });
+    // 创建对联记录，保存上联和难度信息
+    const record = await coupletDb.createCoupletRecord({
+      openid: auth.openid,
+      upperLine,
+      theme: validation.theme!,
+      difficulty: validation.difficulty as 'simple' | 'medium' | 'hard' | undefined,
+    });
+
+    return NextResponse.json({ 
+      upperLine,
+      recordId: record.id,
+    });
   } catch (error) {
     console.error("生成上联失败:", error);
 

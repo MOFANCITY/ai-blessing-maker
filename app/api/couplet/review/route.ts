@@ -8,6 +8,7 @@ import {
   validateCoupletReviewRequest,
 } from "@/lib/couplet-validation";
 import { resolveCoupletAuth } from "@/lib/couplet-api-auth";
+import { coupletDb, userStatsDb } from "@/lib/db";
 
 export async function POST(req: NextRequest) {
   try {
@@ -49,6 +50,19 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
+
+    // 更新对联记录：保存下联、评分、总结等信息
+    if (validation.recordId) {
+      await coupletDb.updateCoupletScore(
+        validation.recordId,
+        review.score,
+        review.summary,
+        review.canShare
+      );
+    }
+
+    // 初始化用户统计（如果不存在）
+    await userStatsDb.initUserStats(auth.openid);
 
     return NextResponse.json({ review });
   } catch (error) {
