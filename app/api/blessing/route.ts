@@ -25,7 +25,8 @@ interface BlessingRequest {
   customDescription?: string; // 自定义描述（智能模式）
   useSmartMode?: boolean;     // 是否使用智能模式
   timestamp?: number;         // 时间戳（可选）
-  version?: string;           // 版本号（可选）
+  version?: string; // 版本号（可选）
+  userProfile?: 'elderly' | 'standard' | 'young'; // 用户群配置
 }
 
 /**

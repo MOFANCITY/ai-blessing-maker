@@ -11,7 +11,8 @@ interface BlessingRequest {
   customDescription?: string; // 用户自定义描述（智能模式使用）
   useSmartMode?: boolean;     // 是否使用智能模式
   timestamp?: number;         // 时间戳（可选）
-  version?: string;           // 版本号（可选）
+  version?: string;
+  userProfile?: 'elderly' | 'standard' | 'young'; // 用户群配置，用于调整语气风格
 }
 
 /**
@@ -22,7 +23,10 @@ interface BlessingRequest {
  */
 export function createSmartPrompt(options: BlessingRequest): string {
   const { customDescription } = options;
-  
+
+  // 根据用户群调整语气要求
+  const toneGuidance = getUserProfileToneGuidance(options.userProfile);
+
   return `
 # Role
 你是一位精通中文社交礼仪与情感表达的文案专家，擅长根据不同人际关系捕捉最恰当的语气，创作既真诚又不落俗套的祝福语。
@@ -33,6 +37,7 @@ export function createSmartPrompt(options: BlessingRequest): string {
 用户描述：${customDescription}
 
 请生成一段真诚、个性化、符合情境的祝福语。要求：
+${toneGuidance}
 1. 深度理解用户描述中的所有细节：人物关系、具体情况、情感背景等
 2. 自动识别并恰当使用文中提到的姓名、称呼、关系
 3. 根据描述的场景和情境选择最合适的语气和风格
@@ -55,6 +60,9 @@ export function createSmartPrompt(options: BlessingRequest): string {
 export function createTemplatePrompt(options: BlessingRequest): string {
   const { occasion, targetPerson, style = "温馨" } = options;
 
+  // 根据用户群调整语气要求
+  const toneGuidance = getUserProfileToneGuidance(options.userProfile);
+
   // 检查必需参数
   if (!occasion || !targetPerson) {
     throw new Error('经典模式需要提供场合和目标人群');
@@ -71,6 +79,7 @@ export function createTemplatePrompt(options: BlessingRequest): string {
 - 期望风格：${style}
 
 # Requirements
+${toneGuidance}
 1. 身份对齐：根据“祝福对象”自动调整称呼（如敬语“您”或亲昵称呼）和社交距离，确保不突兀。
 2. 内容结构：建议包含【对现状的肯定/赞美】+【核心祝愿】+【对未来的美好期许】。
 3. 语言去水：避免空洞的成语堆砌，优先使用口语化但有质感的表达，字数严格控制在 50-80 字之间。
@@ -121,6 +130,7 @@ export function createCoupletUpperPrompt(theme: string, difficulty?: 'simple' | 
 为「${theme}」主题创作一副对联的**上联**（仅上联一行）。
 
 # Requirements
+
 1. 字数：${charRange} 个汉字（不含标点、空格）。字数必须严格在这个范围内。
 2. 内容积极，适合送给亲友，不涉及政治、暴力、低俗、迷信等敏感内容。
 3. 语言典雅但不晦涩，中老年读者能看懂。
@@ -163,6 +173,7 @@ export function createCoupletReviewPrompt(
 - 下联（应为${charRange}字）：${lowerLine}
 
 # Requirements
+
 1. 字数要求：下联应为 ${charRange} 个汉字，与上联相配。字数不符时要特别指出，但不要因此过度扣分。
 2. 先判断下联风格：是传统工整型还是诙谐搞笑型。两种风格都认真点评，不要因风格不同而否定用户。
 3. 从三方面简评：字数是否相配、词性/结构是否大致对仗、意境是否贴切。
@@ -177,4 +188,44 @@ export function createCoupletReviewPrompt(
 # Output
 直接输出一个 JSON 对象，不要任何解释文字，不要 markdown 代码块标记（\`\`\`），不要多余文字。格式如下：
 {"score":4,"summary":"一句话总评","strengths":["优点1"],"suggestions":["建议1"],"canShare":true}`;
+}
+
+/**
+ * 根据用户群返回对应的语气指导文本
+ * @param userProfile - 用户群类型
+ * @returns 语气指导文本，插入到 prompt 的 Requirements 部分
+ */
+function getUserProfileToneGuidance(userProfile?: 'elderly' | 'standard' | 'young'): string {
+  switch (userProfile) {
+    case 'elderly':
+      return `
+0. 语气风格：使用长辈熟悉的表达方式，语速感舒缓，多用"祝您""愿您"等敬语，避免网络流行语和缩写。
+`;
+    case 'young':
+      return `
+0. 语气风格：轻松活泼，可适当使用表情符号（如✨🎉💪）和网络热词，语言年轻化有网感，但保持真诚不油腻。
+`;
+    case 'standard':
+    default:
+      return `
+0. 语气风格：通用友好，平衡正式与亲切，适合大多数社交场景，避免极端口语化或过于书面化。
+`;
+  }
+}
+
+/**
+ * 根据用户群调整祝福语长度建议
+ * @param userProfile - 用户群类型
+ * @returns 字数范围描述
+ */
+export function getBlessingLengthGuidance(userProfile?: 'elderly' | 'standard' | 'young'): string {
+  switch (userProfile) {
+    case 'elderly':
+      return '40-70字';  // 简短清晰，便于阅读
+    case 'young':
+      return '60-120字'; // 可稍长，表达更丰富
+    case 'standard':
+    default:
+      return '50-100字'; // 通用长度
+  }
 }
