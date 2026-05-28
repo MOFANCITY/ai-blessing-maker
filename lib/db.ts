@@ -134,14 +134,14 @@ export const coupletDb = {
     return result.rows[0] ?? null;
   },
 
-  // 更新对联记录评分
-  async updateCoupletScore(recordId: number, score: number, reviewSummary: string, canShare: boolean) {
+  // 更新对联记录评分和下联
+  async updateCoupletScore(recordId: number, lowerLine: string, score: number, reviewSummary: string, canShare: boolean) {
     const result = await db.execute({
       sql: `UPDATE couplet_records
-            SET score = ?, review_summary = ?, can_share = ?, updated_at = ?
+            SET lower_line = ?, score = ?, review_summary = ?, can_share = ?, updated_at = ?
             WHERE id = ?
             RETURNING *`,
-      args: [score, reviewSummary, canShare ? 1 : 0, new Date().toISOString(), recordId],
+      args: [lowerLine, score, reviewSummary, canShare ? 1 : 0, new Date().toISOString(), recordId],
     });
     return result.rows[0];
   },
@@ -158,11 +158,11 @@ export const coupletDb = {
     return result.rows[0];
   },
 
-  // 获取用户的所有对联
+  // 获取用户的所有对联（只获取已完成品联的记录）
   async getUserCouplets(openid: string, limit = 20, offset = 0) {
     const result = await db.execute({
       sql: `SELECT * FROM couplet_records
-            WHERE openid = ?
+            WHERE openid = ? AND score IS NOT NULL
             ORDER BY created_at DESC
             LIMIT ? OFFSET ?`,
       args: [openid, limit, offset],
@@ -170,10 +170,10 @@ export const coupletDb = {
     return result.rows;
   },
 
-  // 获取用户对联总数
+  // 获取用户对联总数（只计算已完成品联的记录）
   async getUserCoupletCount(openid: string) {
     const result = await db.execute({
-      sql: 'SELECT COUNT(*) as total FROM couplet_records WHERE openid = ?',
+      sql: 'SELECT COUNT(*) as total FROM couplet_records WHERE openid = ? AND score IS NOT NULL',
       args: [openid],
     });
     return Number(result.rows[0].total);

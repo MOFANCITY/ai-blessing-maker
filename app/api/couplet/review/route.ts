@@ -65,6 +65,7 @@ export async function POST(req: NextRequest) {
     if (validation.recordId) {
       await coupletDb.updateCoupletScore(
         validation.recordId,
+        validation.lowerLine!,
         review.score,
         review.summary,
         review.canShare
