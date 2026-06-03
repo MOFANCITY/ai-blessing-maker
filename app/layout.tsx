@@ -7,10 +7,10 @@ import "./globals.css";
 // SEO 元数据配置
 // 定义网站标题、描述、关键词和图标
 export const metadata: Metadata = {
-  title: "妙笔祝福 — AI祝福语生成器",
+  title: "灵言 — AI 中文表达助手",
   description:
-    "妙笔祝福后端与演示：AI智能生成个性化中文祝福语，支持多种场景、节日和目标人群。登录用户的祝福记录会保存在账户中。",
-  keywords: "妙笔祝福,祝福语,AI生成,个性化,节日祝福,生日祝福",
+    "灵言后端与演示：AI 智能生成个性化中文文本，支持祝福、怼人、对联、古诗 4 大功能。登录用户的记录会保存在账户中。",
+  keywords: "灵言,祝福,怼人,对联,古诗,AI生成,中文表达",
   icons: {
     icon: "/favicon.svg",
   },
@@ -40,11 +40,11 @@ export default function RootLayout({
             <div className="max-w-6xl mx-auto px-4">
               {/* 主标题 */}
               <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-black text-center festive-title mb-4">
-                🎊 妙笔祝福 · AI祝福语生成器 🎊
+                灵言 · AI 中文表达助手
               </h1>
               {/* 副标题 */}
               <p className="text-center text-sm sm:text-base md:text-lg lg:text-xl font-semibold text-white drop-shadow-lg">
-                ✨ 不会写祝福，也能说出心里话 ✨
+                以 AI 传心意
               </p>
               {/* 装饰性动画表情，不参与屏幕阅读器 */}
               <div className="text-center mt-4 space-x-2" aria-hidden="true">
@@ -97,7 +97,7 @@ export default function RootLayout({
             </div>
             {/* 版权信息 */}
             <p className="text-lg font-semibold drop-shadow-lg">
-              &copy; 2025 妙笔祝福 - 让祝福更有温度 🌟
+              &copy; 2025 灵言 - 以 AI 传心意
             </p>
             {/* 隐私声明 */}
             <p className="text-sm mt-2 opacity-90">

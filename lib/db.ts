@@ -5,7 +5,31 @@ const db = createClient({
   authToken: process.env.TURSO_AUTH_TOKEN,
 });
 
-export const TABLES = { USERS: 'users', USER_HISTORY: 'user_history' };
+export const TABLES = { USERS: 'users', USER_HISTORY: 'user_history', DISS_RECORDS: 'diss_records', POEM_RECORDS: 'poem_records' };
+
+// 怼人记录表（运行时幂等创建）
+let dissTableReady: Promise<void> | null = null;
+function ensureDissTable() {
+  if (dissTableReady) return dissTableReady;
+  dissTableReady = db.execute(
+    `CREATE TABLE IF NOT EXISTS diss_records (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT,
+      situation TEXT NOT NULL,
+      tone TEXT NOT NULL,
+      target TEXT,
+      preset_id TEXT,
+      result TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_diss_records_user_id_created
+      ON diss_records (user_id, created_at DESC)`
+  ).then(() => undefined).catch((err) => {
+    dissTableReady = null;
+    throw err;
+  });
+  return dissTableReady;
+}
 
 export const userDb = {
   async getUserByOpenid(openid: string) {
@@ -347,3 +371,150 @@ export const dailyChallengeDb = {
 
 // Direct query helper for routes that need raw queries
 export { db };
+
+// ========================
+// 古诗记录相关数据库操作
+// ========================
+
+let poemTableReady: Promise<void> | null = null;
+function ensurePoemTable() {
+  if (poemTableReady) return poemTableReady;
+  poemTableReady = db.execute(
+    `CREATE TABLE IF NOT EXISTS poem_records (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT,
+      type TEXT NOT NULL,
+      theme TEXT NOT NULL,
+      game_mode INTEGER,
+      extras TEXT,
+      ai_lines TEXT NOT NULL,
+      user_lines TEXT,
+      result TEXT,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_poem_records_user_id_created
+      ON poem_records (user_id, created_at DESC)`
+  ).then(() => undefined).catch((err) => {
+    poemTableReady = null;
+    throw err;
+  });
+  return poemTableReady;
+}
+
+export const poemDb = {
+  /**
+   * 插入一条古诗记录
+   * aiLines 为 2 行诗用 \n 拼接的字符串
+   */
+  async insertPoemRecord(data: {
+    user_id: string;
+    type: 'poem5' | 'poem7';
+    theme: string;
+    gameMode: boolean;
+    extras?: string | null;
+    aiLines: string;
+    result?: string | null;
+  }) {
+    await ensurePoemTable();
+    const createdAt = Date.now();
+    const result = await db.execute({
+      sql: `INSERT INTO poem_records
+            (user_id, type, theme, game_mode, extras, ai_lines, result, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            RETURNING *`,
+      args: [
+        data.user_id,
+        data.type,
+        data.theme,
+        data.gameMode ? 1 : 0,
+        data.extras ?? null,
+        data.aiLines,
+        data.result ?? null,
+        createdAt,
+      ],
+    });
+    return result.rows[0];
+  },
+
+  /**
+   * 更新古诗记录的用户诗句与最终结果
+   */
+  async updatePoemUserLines(recordId: number | string, userLines: string[], result?: string | null) {
+    await ensurePoemTable();
+    const updated = await db.execute({
+      sql: `UPDATE poem_records
+            SET user_lines = ?, result = ?
+            WHERE id = ?
+            RETURNING *`,
+      args: [userLines.join('\n'), result ?? null, recordId],
+    });
+    return updated.rows[0];
+  },
+
+  /**
+   * 获取用户的古诗历史
+   */
+  async getPoemHistory(userId: string, limit = 20) {
+    await ensurePoemTable();
+    const result = await db.execute({
+      sql: `SELECT * FROM poem_records
+            WHERE user_id = ?
+            ORDER BY created_at DESC
+            LIMIT ?`,
+      args: [userId, Math.max(1, Math.min(100, limit))],
+    });
+    return result.rows;
+  },
+};
+
+// ========================
+// 怼人记录相关数据库操作
+// ========================
+
+export const dissDb = {
+  /**
+   * 插入一条怼人记录
+   */
+  async insertDissRecord(data: {
+    user_id: string;
+    situation: string;
+    tone: string;
+    target?: string | null;
+    preset_id?: string | null;
+    result: string;
+  }) {
+    await ensureDissTable();
+    const createdAt = Date.now();
+    const result = await db.execute({
+      sql: `INSERT INTO diss_records
+            (user_id, situation, tone, target, preset_id, result, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            RETURNING *`,
+      args: [
+        data.user_id,
+        data.situation,
+        data.tone,
+        data.target ?? null,
+        data.preset_id ?? null,
+        data.result,
+        createdAt,
+      ],
+    });
+    return result.rows[0];
+  },
+
+  /**
+   * 获取用户的怼人历史
+   */
+  async getDissHistory(userId: string, limit = 20) {
+    await ensureDissTable();
+    const result = await db.execute({
+      sql: `SELECT * FROM diss_records
+            WHERE user_id = ?
+            ORDER BY created_at DESC
+            LIMIT ?`,
+      args: [userId, Math.max(1, Math.min(100, limit))],
+    });
+    return result.rows;
+  },
+};

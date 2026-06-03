@@ -1,8 +1,20 @@
 // 简化的验证规则
 const LIMITS = {
   customDescription: { min: 5, max: 300 },
-  additionalInfo: { max: 100 }
+  additionalInfo: { max: 100 },
+  dissSituation: { min: 5, max: 500 },
+  dissTarget: { max: 50 },
 };
+
+const VALID_DISS_TONES = ['优雅反击', '一针见血', '幽默调侃', '高级讽刺', '直接怼', '捧杀式'] as const;
+export type DissTone = (typeof VALID_DISS_TONES)[number];
+
+export interface DissCleanedInput {
+  situation: string;
+  tone: string;
+  target?: string;
+  presetId?: string;
+}
 
 // 基础危险词过滤（只过滤明显的提示词注入）
 const BLOCKED_PATTERNS = [
@@ -53,4 +65,151 @@ export function validateInput(data: unknown): { valid: boolean; error?: string }
 // 简单文本清理（移除控制字符）
 export function cleanText(text: string): string {
   return text.replace(/[\x00-\x1F\x7F]/g, '').trim();
+}
+
+/**
+ * 怼人输入验证
+ * - situation: 必填，5-500 字符
+ * - tone: 必填，必须在合法怼人风格列表中
+ * - target: 可选，最多 50 字符
+ * - presetId: 可选字符串
+ */
+export function validateDissInput(data: unknown): { valid: boolean; error?: string; cleaned?: DissCleanedInput } {
+  if (!data || typeof data !== 'object') {
+    return { valid: false, error: '请输入对方原话' };
+  }
+
+  const input = data as { situation?: unknown; tone?: unknown; target?: unknown; presetId?: unknown };
+
+  const rawSituation = typeof input.situation === 'string' ? input.situation.trim() : '';
+  if (!rawSituation) {
+    return { valid: false, error: '请输入对方原话' };
+  }
+  if (rawSituation.length < LIMITS.dissSituation.min) {
+    return { valid: false, error: '描述太短，请详细一些' };
+  }
+  if (rawSituation.length > LIMITS.dissSituation.max) {
+    return { valid: false, error: '描述太长，请简化一下' };
+  }
+
+  if (BLOCKED_PATTERNS.some((pattern) => pattern.test(rawSituation))) {
+    return { valid: false, error: '输入内容不符合要求' };
+  }
+
+  const tone = typeof input.tone === 'string' ? input.tone.trim() : '';
+  if (!tone || !VALID_DISS_TONES.includes(tone as DissTone)) {
+    return { valid: false, error: '请选择怼人风格' };
+  }
+
+  let target: string | undefined;
+  if (input.target !== undefined && input.target !== null) {
+    if (typeof input.target !== 'string') {
+      return { valid: false, error: '称呼格式不正确' };
+    }
+    target = input.target.trim();
+    if (target.length > LIMITS.dissTarget.max) {
+      return { valid: false, error: '称呼不能超过 50 字' };
+    }
+    if (target.length === 0) target = undefined;
+  }
+
+  let presetId: string | undefined;
+  if (input.presetId !== undefined && input.presetId !== null) {
+    if (typeof input.presetId !== 'string') {
+      return { valid: false, error: 'presetId 格式不正确' };
+    }
+    presetId = input.presetId.trim() || undefined;
+  }
+
+  const cleaned: DissCleanedInput = { situation: rawSituation, tone, target, presetId };
+
+  return { valid: true, cleaned };
+}
+
+// ========================
+// 古诗输入验证
+// ========================
+
+const VALID_POEM_TYPES = ['poem5', 'poem7'] as const;
+export type PoemType = (typeof VALID_POEM_TYPES)[number];
+
+export const VALID_POEM_THEMES = [
+  '春天',
+  '新年',
+  '事业',
+  '爱情',
+  '山水',
+  '思念',
+  '离别',
+  '壮志',
+] as const;
+export type PoemTheme = (typeof VALID_POEM_THEMES)[number];
+
+export interface PoemCleanedInput {
+  type: PoemType;
+  theme: PoemTheme;
+  gameMode: boolean;
+  extras?: string;
+}
+
+const LIMITS_POEM = {
+  extras: { max: 200 },
+};
+
+/**
+ * 古诗输入验证
+ * - type: 必填，'poem5' 或 'poem7'
+ * - theme: 必填，必须在 8 个主题列表中
+ * - gameMode: 可选布尔
+ * - extras: 可选字符串，最多 200 字符
+ */
+export function validatePoemInput(
+  data: unknown
+): { valid: boolean; error?: string; cleaned?: PoemCleanedInput } {
+  if (!data || typeof data !== 'object') {
+    return { valid: false, error: '请选择古诗类型和主题' };
+  }
+
+  const input = data as { type?: unknown; theme?: unknown; gameMode?: unknown; extras?: unknown };
+
+  const rawType = typeof input.type === 'string' ? input.type.trim() : '';
+  if (!rawType) {
+    return { valid: false, error: '请选择古诗类型（五言 / 七言）' };
+  }
+  if (!VALID_POEM_TYPES.includes(rawType as PoemType)) {
+    return { valid: false, error: '古诗类型必须是 poem5 或 poem7' };
+  }
+  const type = rawType as PoemType;
+
+  const rawTheme = typeof input.theme === 'string' ? input.theme.trim() : '';
+  if (!rawTheme) {
+    return { valid: false, error: '请选择古诗主题' };
+  }
+  if (!VALID_POEM_THEMES.includes(rawTheme as PoemTheme)) {
+    return { valid: false, error: '主题必须是有效的主题之一' };
+  }
+  const theme = rawTheme as PoemTheme;
+
+  let gameMode = false;
+  if (input.gameMode !== undefined && input.gameMode !== null) {
+    if (typeof input.gameMode !== 'boolean') {
+      return { valid: false, error: '游戏模式格式不正确' };
+    }
+    gameMode = input.gameMode;
+  }
+
+  let extras: string | undefined;
+  if (input.extras !== undefined && input.extras !== null) {
+    if (typeof input.extras !== 'string') {
+      return { valid: false, error: '额外要求格式不正确' };
+    }
+    const trimmed = input.extras.trim();
+    if (trimmed.length > LIMITS_POEM.extras.max) {
+      return { valid: false, error: '额外要求不能超过 200 字' };
+    }
+    extras = trimmed || undefined;
+  }
+
+  const cleaned: PoemCleanedInput = { type, theme, gameMode, extras };
+  return { valid: true, cleaned };
 }
