@@ -540,14 +540,15 @@ export const poemDb = {
     gameMode: boolean;
     extras?: string | null;
     aiLines: string;
+    userLines?: string | null;
     result?: string | null;
   }) {
     await ensurePoemTable();
     const createdAt = Date.now();
     const result = await db.execute({
       sql: `INSERT INTO poem_records
-            (user_id, type, theme, game_mode, extras, ai_lines, result, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            (user_id, type, theme, game_mode, extras, ai_lines, user_lines, result, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING *`,
       args: [
         data.user_id,
@@ -556,6 +557,7 @@ export const poemDb = {
         data.gameMode ? 1 : 0,
         data.extras ?? null,
         data.aiLines,
+        data.userLines ?? null,
         data.result ?? null,
         createdAt,
       ],

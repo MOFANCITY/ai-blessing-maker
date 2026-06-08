@@ -29,9 +29,7 @@ function resolveAuth(req: NextRequest): { openid: string } | null {
   try {
     const parts = token.split(".");
     if (parts.length !== 3) return null;
-    const payload = parts[1]
-      .replace(/-/g, "+")
-      .replace(/_/g, "/");
+    const payload = parts[1].replace(/-/g, "+").replace(/_/g, "/");
     const padded = payload + "=".repeat((4 - (payload.length % 4)) % 4);
     const decoded = JSON.parse(Buffer.from(padded, "base64").toString());
     if (typeof decoded.openid === "string" && decoded.openid.length > 0) {
@@ -51,7 +49,7 @@ export async function POST(req: NextRequest) {
       if (!userAgent.includes("MicroMessenger")) {
         return NextResponse.json(
           { error: "此应用仅支持微信小程序访问，请在微信中打开" },
-          { status: 403 }
+          { status: 403 },
         );
       }
     }
@@ -74,16 +72,31 @@ export async function POST(req: NextRequest) {
     }
 
     if (!Array.isArray(body.aiLines) || body.aiLines.length < 2) {
-      return NextResponse.json({ error: "AI 创作的诗句不完整" }, { status: 400 });
+      return NextResponse.json(
+        { error: "AI 创作的诗句不完整" },
+        { status: 400 },
+      );
     }
 
     if (!Array.isArray(body.userLines) || body.userLines.length < 2) {
-      return NextResponse.json({ error: "您续写的诗句不完整" }, { status: 400 });
+      return NextResponse.json(
+        { error: "您续写的诗句不完整" },
+        { status: 400 },
+      );
     }
 
-    const aiLines = [body.aiLines[0], body.aiLines[1]].filter(Boolean).join("\n");
-    const userLines = [body.userLines[0], body.userLines[1]].filter(Boolean).join("\n");
-    const result = [body.aiLines[0], body.aiLines[1], body.userLines[0], body.userLines[1]]
+    const aiLines = [body.aiLines[0], body.aiLines[1]]
+      .filter(Boolean)
+      .join("\n");
+    const userLines = [body.userLines[0], body.userLines[1]]
+      .filter(Boolean)
+      .join("\n");
+    const result = [
+      body.aiLines[0],
+      body.aiLines[1],
+      body.userLines[0],
+      body.userLines[1],
+    ]
       .filter(Boolean)
       .join("\n");
 
@@ -93,8 +106,9 @@ export async function POST(req: NextRequest) {
         type,
         theme,
         gameMode: true,
-        extras: userLines,
+        extras: null,
         aiLines,
+        userLines,
         result,
       });
     } catch (dbError) {
@@ -113,7 +127,10 @@ export async function POST(req: NextRequest) {
     if (axios.isAxiosError(error)) {
       if (error.response?.status === 429) {
         errorMessage = "请求太频繁，请稍后再试";
-      } else if (error.response?.status === 401 || error.response?.status === 403) {
+      } else if (
+        error.response?.status === 401 ||
+        error.response?.status === 403
+      ) {
         errorMessage = "服务暂时不可用";
       }
     } else if (error instanceof Error && error.message.includes("429")) {
