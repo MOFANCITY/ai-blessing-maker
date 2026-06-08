@@ -1,64 +1,106 @@
-import { createClient } from '@libsql/client/http';
+import { createClient } from "@libsql/client/http";
 
 const db = createClient({
   url: process.env.TURSO_DATABASE_URL!,
   authToken: process.env.TURSO_AUTH_TOKEN,
 });
 
-export const TABLES = { USERS: 'users', USER_HISTORY: 'user_history', DISS_RECORDS: 'diss_records', POEM_RECORDS: 'poem_records' };
+export const TABLES = {
+  USERS: "users",
+  USER_HISTORY: "user_history",
+  DISS_RECORDS: "diss_records",
+  POEM_RECORDS: "poem_records",
+};
 
 // 怼人记录表（运行时幂等创建）
 let dissTableReady: Promise<void> | null = null;
 function ensureDissTable() {
   if (dissTableReady) return dissTableReady;
-  dissTableReady = db.execute(
-    `CREATE TABLE IF NOT EXISTS diss_records (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id TEXT,
-      situation TEXT NOT NULL,
-      tone TEXT NOT NULL,
-      target TEXT,
-      preset_id TEXT,
-      result TEXT NOT NULL,
-      created_at INTEGER NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_diss_records_user_id_created
-      ON diss_records (user_id, created_at DESC)`
-  ).then(() => undefined).catch((err) => {
-    dissTableReady = null;
-    throw err;
-  });
+  dissTableReady = db
+    .execute(
+      `CREATE TABLE IF NOT EXISTS diss_records (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT,
+        situation TEXT NOT NULL,
+        tone TEXT NOT NULL,
+        target TEXT,
+        preset_id TEXT,
+        result TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      )`,
+    )
+    .then(() =>
+      db.execute(
+        `CREATE INDEX IF NOT EXISTS idx_diss_records_user_id_created
+          ON diss_records (user_id, created_at DESC)`,
+      ),
+    )
+    .then(() => undefined)
+    .catch((err) => {
+      dissTableReady = null;
+      throw err;
+    });
   return dissTableReady;
 }
 
 export const userDb = {
   async getUserByOpenid(openid: string) {
     const result = await db.execute({
-      sql: 'SELECT * FROM users WHERE openid = ? LIMIT 1',
+      sql: "SELECT * FROM users WHERE openid = ? LIMIT 1",
       args: [openid],
     });
     return result.rows[0] ?? null;
   },
 
-  async createUser(userData: { openid: string; unionid?: string; nickname: string; avatar_url?: string }) {
+  async createUser(userData: {
+    openid: string;
+    unionid?: string;
+    nickname: string;
+    avatar_url?: string;
+  }) {
     const result = await db.execute({
-      sql: 'INSERT INTO users (openid, unionid, nickname, avatar_url) VALUES (?, ?, ?, ?) RETURNING *',
-      args: [userData.openid, userData.unionid ?? null, userData.nickname, userData.avatar_url ?? null],
+      sql: "INSERT INTO users (openid, unionid, nickname, avatar_url) VALUES (?, ?, ?, ?) RETURNING *",
+      args: [
+        userData.openid,
+        userData.unionid ?? null,
+        userData.nickname,
+        userData.avatar_url ?? null,
+      ],
     });
     return result.rows[0];
   },
 
-  async updateUser(openid: string, updates: { nickname?: string; avatar_url?: string; last_login_at?: boolean; total_blessings_generated?: number }) {
+  async updateUser(
+    openid: string,
+    updates: {
+      nickname?: string;
+      avatar_url?: string;
+      last_login_at?: boolean;
+      total_blessings_generated?: number;
+    },
+  ) {
     const fields: string[] = [];
     const args: unknown[] = [];
-    if (updates.nickname !== undefined) { fields.push('nickname = ?'); args.push(updates.nickname); }
-    if (updates.avatar_url !== undefined) { fields.push('avatar_url = ?'); args.push(updates.avatar_url); }
-    if (updates.total_blessings_generated !== undefined) { fields.push('total_blessings_generated = ?'); args.push(updates.total_blessings_generated); }
-    if (updates.last_login_at) { fields.push('last_login_at = ?'); args.push(new Date().toISOString()); }
+    if (updates.nickname !== undefined) {
+      fields.push("nickname = ?");
+      args.push(updates.nickname);
+    }
+    if (updates.avatar_url !== undefined) {
+      fields.push("avatar_url = ?");
+      args.push(updates.avatar_url);
+    }
+    if (updates.total_blessings_generated !== undefined) {
+      fields.push("total_blessings_generated = ?");
+      args.push(updates.total_blessings_generated);
+    }
+    if (updates.last_login_at) {
+      fields.push("last_login_at = ?");
+      args.push(new Date().toISOString());
+    }
     if (fields.length === 0) return null;
     args.push(openid);
     const result = await db.execute({
-      sql: `UPDATE users SET ${fields.join(', ')} WHERE openid = ? RETURNING *`,
+      sql: `UPDATE users SET ${fields.join(", ")} WHERE openid = ? RETURNING *`,
       args,
     });
     return result.rows[0] ?? null;
@@ -66,7 +108,7 @@ export const userDb = {
 
   async incrementBlessingCount(openid: string) {
     await db.execute({
-      sql: 'UPDATE users SET total_blessings_generated = total_blessings_generated + 1 WHERE openid = ?',
+      sql: "UPDATE users SET total_blessings_generated = total_blessings_generated + 1 WHERE openid = ?",
       args: [openid],
     });
   },
@@ -76,26 +118,41 @@ export const historyDb = {
   async getUserHistory(userId: string, page = 1, pageSize = 10) {
     const offset = (page - 1) * pageSize;
     const [countResult, dataResult] = await Promise.all([
-      db.execute({ sql: 'SELECT COUNT(*) as total FROM user_history WHERE user_id = ?', args: [userId] }),
       db.execute({
-        sql: 'SELECT * FROM user_history WHERE user_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?',
+        sql: "SELECT COUNT(*) as total FROM user_history WHERE user_id = ?",
+        args: [userId],
+      }),
+      db.execute({
+        sql: "SELECT * FROM user_history WHERE user_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
         args: [userId, pageSize, offset],
       }),
     ]);
     return { data: dataResult.rows, total: Number(countResult.rows[0].total) };
   },
 
-  async addHistory(data: { user_id: string; blessing: string; occasion?: string; target_person?: string; style?: string }) {
+  async addHistory(data: {
+    user_id: string;
+    blessing: string;
+    occasion?: string;
+    target_person?: string;
+    style?: string;
+  }) {
     const result = await db.execute({
-      sql: 'INSERT INTO user_history (user_id, blessing, occasion, target_person, style) VALUES (?, ?, ?, ?, ?) RETURNING *',
-      args: [data.user_id, data.blessing, data.occasion ?? null, data.target_person ?? null, data.style ?? '传统'],
+      sql: "INSERT INTO user_history (user_id, blessing, occasion, target_person, style) VALUES (?, ?, ?, ?, ?) RETURNING *",
+      args: [
+        data.user_id,
+        data.blessing,
+        data.occasion ?? null,
+        data.target_person ?? null,
+        data.style ?? "传统",
+      ],
     });
     return result.rows[0];
   },
 
   async deleteHistory(historyId: string, userId: string) {
     await db.execute({
-      sql: 'DELETE FROM user_history WHERE id = ? AND user_id = ?',
+      sql: "DELETE FROM user_history WHERE id = ? AND user_id = ?",
       args: [historyId, userId],
     });
     return true;
@@ -103,7 +160,7 @@ export const historyDb = {
 
   async clearUserHistory(userId: string) {
     await db.execute({
-      sql: 'DELETE FROM user_history WHERE user_id = ?',
+      sql: "DELETE FROM user_history WHERE user_id = ?",
       args: [userId],
     });
     return true;
@@ -111,12 +168,26 @@ export const historyDb = {
 
   async getStats(userId: string) {
     const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString();
+    const startOfMonth = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      1,
+    ).toISOString();
+    const endOfMonth = new Date(
+      now.getFullYear(),
+      now.getMonth() + 1,
+      0,
+      23,
+      59,
+      59,
+    ).toISOString();
     const [totalResult, monthlyResult] = await Promise.all([
-      db.execute({ sql: 'SELECT COUNT(*) as total FROM user_history WHERE user_id = ?', args: [userId] }),
       db.execute({
-        sql: 'SELECT COUNT(*) as total FROM user_history WHERE user_id = ? AND created_at >= ? AND created_at <= ?',
+        sql: "SELECT COUNT(*) as total FROM user_history WHERE user_id = ?",
+        args: [userId],
+      }),
+      db.execute({
+        sql: "SELECT COUNT(*) as total FROM user_history WHERE user_id = ? AND created_at >= ? AND created_at <= ?",
         args: [userId, startOfMonth, endOfMonth],
       }),
     ]);
@@ -138,13 +209,20 @@ export const coupletDb = {
     upperLine: string;
     lowerLine?: string;
     theme: string;
-    difficulty?: 'simple' | 'medium' | 'hard';
+    difficulty?: "simple" | "medium" | "hard";
   }) {
     const result = await db.execute({
       sql: `INSERT INTO couplet_records (openid, upper_line, lower_line, theme, difficulty, created_at)
             VALUES (?, ?, ?, ?, ?, ?)
             RETURNING id, openid, upper_line, lower_line, theme, difficulty, score, created_at`,
-      args: [data.openid, data.upperLine, data.lowerLine ?? null, data.theme, data.difficulty ?? 'medium', new Date().toISOString()],
+      args: [
+        data.openid,
+        data.upperLine,
+        data.lowerLine ?? null,
+        data.theme,
+        data.difficulty ?? "medium",
+        new Date().toISOString(),
+      ],
     });
     return result.rows[0];
   },
@@ -152,20 +230,33 @@ export const coupletDb = {
   // 获取单条对联记录
   async getCoupletRecord(recordId: number) {
     const result = await db.execute({
-      sql: 'SELECT * FROM couplet_records WHERE id = ? LIMIT 1',
+      sql: "SELECT * FROM couplet_records WHERE id = ? LIMIT 1",
       args: [recordId],
     });
     return result.rows[0] ?? null;
   },
 
   // 更新对联记录评分和下联
-  async updateCoupletScore(recordId: number, lowerLine: string, score: number, reviewSummary: string, canShare: boolean) {
+  async updateCoupletScore(
+    recordId: number,
+    lowerLine: string,
+    score: number,
+    reviewSummary: string,
+    canShare: boolean,
+  ) {
     const result = await db.execute({
       sql: `UPDATE couplet_records
             SET lower_line = ?, score = ?, review_summary = ?, can_share = ?, updated_at = ?
             WHERE id = ?
             RETURNING *`,
-      args: [lowerLine, score, reviewSummary, canShare ? 1 : 0, new Date().toISOString(), recordId],
+      args: [
+        lowerLine,
+        score,
+        reviewSummary,
+        canShare ? 1 : 0,
+        new Date().toISOString(),
+        recordId,
+      ],
     });
     return result.rows[0];
   },
@@ -197,7 +288,7 @@ export const coupletDb = {
   // 获取用户对联总数（只计算已完成品联的记录）
   async getUserCoupletCount(openid: string) {
     const result = await db.execute({
-      sql: 'SELECT COUNT(*) as total FROM couplet_records WHERE openid = ? AND score IS NOT NULL',
+      sql: "SELECT COUNT(*) as total FROM couplet_records WHERE openid = ? AND score IS NOT NULL",
       args: [openid],
     });
     return Number(result.rows[0].total);
@@ -219,7 +310,7 @@ export const userStatsDb = {
   // 获取用户统计
   async getUserStats(openid: string) {
     const result = await db.execute({
-      sql: 'SELECT * FROM user_stats WHERE openid = ? LIMIT 1',
+      sql: "SELECT * FROM user_stats WHERE openid = ? LIMIT 1",
       args: [openid],
     });
     return result.rows[0] ?? null;
@@ -243,27 +334,30 @@ export const userStatsDb = {
   },
 
   // 更新用户统计（对联数、分享数）
-  async updateStats(openid: string, updates: { coupletCount?: number; shareCount?: number }) {
+  async updateStats(
+    openid: string,
+    updates: { coupletCount?: number; shareCount?: number },
+  ) {
     const fields: string[] = [];
     const args: unknown[] = [];
 
     if (updates.coupletCount !== undefined) {
-      fields.push('total_couplets = ?');
+      fields.push("total_couplets = ?");
       args.push(updates.coupletCount);
     }
     if (updates.shareCount !== undefined) {
-      fields.push('total_shares = ?');
+      fields.push("total_shares = ?");
       args.push(updates.shareCount);
     }
 
     if (fields.length === 0) return null;
 
-    fields.push('updated_at = ?');
+    fields.push("updated_at = ?");
     args.push(new Date().toISOString());
     args.push(openid);
 
     const result = await db.execute({
-      sql: `UPDATE user_stats SET ${fields.join(', ')} WHERE openid = ? RETURNING *`,
+      sql: `UPDATE user_stats SET ${fields.join(", ")} WHERE openid = ? RETURNING *`,
       args,
     });
     return result.rows[0];
@@ -284,7 +378,15 @@ export const achievementDb = {
 
   // 初始化用户所有成就
   async initAchievements(openid: string) {
-    const badges = ['novice', 'enthusiast', 'master', 'spring_expert', 'lantern_expert', 'sharing_expert', 'viral'];
+    const badges = [
+      "novice",
+      "enthusiast",
+      "master",
+      "spring_expert",
+      "lantern_expert",
+      "sharing_expert",
+      "viral",
+    ];
     for (const badgeId of badges) {
       await db.execute({
         sql: `INSERT OR IGNORE INTO user_achievements (openid, badge_id, progress, created_at)
@@ -323,19 +425,30 @@ export const dailyChallengeDb = {
   // 获取指定日期的每日挑战
   async getDailyChallenge(date: string) {
     const result = await db.execute({
-      sql: 'SELECT * FROM daily_challenges WHERE challenge_date = ? LIMIT 1',
+      sql: "SELECT * FROM daily_challenges WHERE challenge_date = ? LIMIT 1",
       args: [date],
     });
     return result.rows[0] ?? null;
   },
 
   // 创建每日挑战
-  async createDailyChallenge(data: { date: string; upperLine: string; theme: string; difficulty: string }) {
+  async createDailyChallenge(data: {
+    date: string;
+    upperLine: string;
+    theme: string;
+    difficulty: string;
+  }) {
     const result = await db.execute({
       sql: `INSERT INTO daily_challenges (challenge_date, upper_line, theme, difficulty, created_at)
             VALUES (?, ?, ?, ?, ?)
             RETURNING *`,
-      args: [data.date, data.upperLine, data.theme, data.difficulty, new Date().toISOString()],
+      args: [
+        data.date,
+        data.upperLine,
+        data.theme,
+        data.difficulty,
+        new Date().toISOString(),
+      ],
     });
     return result.rows[0];
   },
@@ -363,7 +476,14 @@ export const dailyChallengeDb = {
       sql: `INSERT OR REPLACE INTO user_daily_records (openid, challenge_date, score, time_spent, is_limit_mode, updated_at)
             VALUES (?, ?, ?, ?, ?, ?)
             RETURNING *`,
-      args: [data.openid, data.date, data.score, data.timeSpent, data.isLimitMode ? 1 : 0, new Date().toISOString()],
+      args: [
+        data.openid,
+        data.date,
+        data.score,
+        data.timeSpent,
+        data.isLimitMode ? 1 : 0,
+        new Date().toISOString(),
+      ],
     });
     return result.rows[0];
   },
@@ -379,8 +499,9 @@ export { db };
 let poemTableReady: Promise<void> | null = null;
 function ensurePoemTable() {
   if (poemTableReady) return poemTableReady;
-  poemTableReady = db.execute(
-    `CREATE TABLE IF NOT EXISTS poem_records (
+  poemTableReady = db
+    .execute(
+      `CREATE TABLE IF NOT EXISTS poem_records (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id TEXT,
       type TEXT NOT NULL,
@@ -391,13 +512,19 @@ function ensurePoemTable() {
       user_lines TEXT,
       result TEXT,
       created_at INTEGER NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_poem_records_user_id_created
-      ON poem_records (user_id, created_at DESC)`
-  ).then(() => undefined).catch((err) => {
-    poemTableReady = null;
-    throw err;
-  });
+    )`,
+    )
+    .then(() =>
+      db.execute(
+        `CREATE INDEX IF NOT EXISTS idx_poem_records_user_id_created
+          ON poem_records (user_id, created_at DESC)`,
+      ),
+    )
+    .then(() => undefined)
+    .catch((err) => {
+      poemTableReady = null;
+      throw err;
+    });
   return poemTableReady;
 }
 
@@ -408,7 +535,7 @@ export const poemDb = {
    */
   async insertPoemRecord(data: {
     user_id: string;
-    type: 'poem5' | 'poem7';
+    type: "poem5" | "poem7";
     theme: string;
     gameMode: boolean;
     extras?: string | null;
@@ -439,14 +566,18 @@ export const poemDb = {
   /**
    * 更新古诗记录的用户诗句与最终结果
    */
-  async updatePoemUserLines(recordId: number | string, userLines: string[], result?: string | null) {
+  async updatePoemUserLines(
+    recordId: number | string,
+    userLines: string[],
+    result?: string | null,
+  ) {
     await ensurePoemTable();
     const updated = await db.execute({
       sql: `UPDATE poem_records
             SET user_lines = ?, result = ?
             WHERE id = ?
             RETURNING *`,
-      args: [userLines.join('\n'), result ?? null, recordId],
+      args: [userLines.join("\n"), result ?? null, recordId],
     });
     return updated.rows[0];
   },
