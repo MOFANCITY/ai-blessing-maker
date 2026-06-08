@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import axios from "axios";
-import { generateBlessing } from "@/lib/ai-service";
-import { createPoemPrompt } from "@/lib/prompt-templates";
-import { validatePoemInput } from "@/lib/validation";
+import { poemDb } from "@/lib/db";
 
-interface PoemRequest {
+interface CompletePoemRequest {
   type?: unknown;
   theme?: unknown;
-  gameMode?: unknown;
-  extras?: unknown;
+  aiLines?: unknown;
+  userLines?: unknown;
 }
 
 function resolveAuth(req: NextRequest): { openid: string } | null {
@@ -28,12 +26,12 @@ function resolveAuth(req: NextRequest): { openid: string } | null {
 
   if (!token) return null;
 
-  // Inline lightweight decode to avoid coupling this route to a specific auth lib.
-  // In dev we never reach here; production callers must send a real token.
   try {
     const parts = token.split(".");
     if (parts.length !== 3) return null;
-    const payload = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const payload = parts[1]
+      .replace(/-/g, "+")
+      .replace(/_/g, "/");
     const padded = payload + "=".repeat((4 - (payload.length % 4)) % 4);
     const decoded = JSON.parse(Buffer.from(padded, "base64").toString());
     if (typeof decoded.openid === "string" && decoded.openid.length > 0) {
@@ -45,28 +43,6 @@ function resolveAuth(req: NextRequest): { openid: string } | null {
   return null;
 }
 
-function parsePoemResponse(
-  raw: string,
-  expectedCharsPerLine: number,
-): string[] | null {
-  const lines = raw
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0);
-
-  if (lines.length < 2) return null;
-
-  const firstTwo = lines.slice(0, 2);
-  for (const line of firstTwo) {
-    // Count only CJK chars; reject if any non-CJK chars remain or length doesn't match
-    const cjkCount = [...line].filter((c) => /[\u4e00-\u9fff]/.test(c)).length;
-    if (cjkCount !== expectedCharsPerLine) return null;
-    // Also reject if there are any extra non-CJK chars (digits, latin, punctuation)
-    if (line.length !== cjkCount) return null;
-  }
-  return firstTwo;
-}
-
 export async function POST(req: NextRequest) {
   try {
     const isDevelopment = process.env.NODE_ENV === "development";
@@ -75,7 +51,7 @@ export async function POST(req: NextRequest) {
       if (!userAgent.includes("MicroMessenger")) {
         return NextResponse.json(
           { error: "此应用仅支持微信小程序访问，请在微信中打开" },
-          { status: 403 },
+          { status: 403 }
         );
       }
     }
@@ -85,43 +61,59 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "用户未登录" }, { status: 401 });
     }
 
-    const body = (await req.json()) as PoemRequest;
-    const validation = validatePoemInput(body);
-    if (!validation.valid || !validation.cleaned) {
-      return NextResponse.json({ error: validation.error }, { status: 400 });
+    const body = (await req.json()) as CompletePoemRequest;
+
+    const type = body.type;
+    if (type !== "poem5" && type !== "poem7") {
+      return NextResponse.json({ error: "古诗类型不正确" }, { status: 400 });
     }
 
-    const { type, theme, gameMode, extras } = validation.cleaned;
-    const expectedCharsPerLine = type === "poem7" ? 7 : 5;
+    const theme = typeof body.theme === "string" ? body.theme.trim() : "";
+    if (!theme) {
+      return NextResponse.json({ error: "古诗主题不能为空" }, { status: 400 });
+    }
 
-    const prompt = createPoemPrompt(type, theme, gameMode, extras);
-    const raw = await generateBlessing(prompt);
+    if (!Array.isArray(body.aiLines) || body.aiLines.length < 2) {
+      return NextResponse.json({ error: "AI 创作的诗句不完整" }, { status: 400 });
+    }
 
-    const lines = parsePoemResponse(raw, expectedCharsPerLine);
-    if (!lines) {
-      return NextResponse.json(
-        { error: "古诗生成格式不正确，请重试" },
-        { status: 500 },
-      );
+    if (!Array.isArray(body.userLines) || body.userLines.length < 2) {
+      return NextResponse.json({ error: "您续写的诗句不完整" }, { status: 400 });
+    }
+
+    const aiLines = [body.aiLines[0], body.aiLines[1]].filter(Boolean).join("\n");
+    const userLines = [body.userLines[0], body.userLines[1]].filter(Boolean).join("\n");
+    const result = [body.aiLines[0], body.aiLines[1], body.userLines[0], body.userLines[1]]
+      .filter(Boolean)
+      .join("\n");
+
+    try {
+      await poemDb.insertPoemRecord({
+        user_id: auth.openid,
+        type,
+        theme,
+        gameMode: true,
+        extras: userLines,
+        aiLines,
+        result,
+      });
+    } catch (dbError) {
+      console.error("插入古诗完成记录失败:", dbError);
     }
 
     return NextResponse.json({
       success: true,
-      lines,
       type,
       theme,
     });
   } catch (error) {
-    console.error("生成古诗失败:", error);
+    console.error("提交古诗合作失败:", error);
 
-    let errorMessage = "生成失败，请重试";
+    let errorMessage = "提交失败，请重试";
     if (axios.isAxiosError(error)) {
       if (error.response?.status === 429) {
         errorMessage = "请求太频繁，请稍后再试";
-      } else if (
-        error.response?.status === 401 ||
-        error.response?.status === 403
-      ) {
+      } else if (error.response?.status === 401 || error.response?.status === 403) {
         errorMessage = "服务暂时不可用";
       }
     } else if (error instanceof Error && error.message.includes("429")) {
