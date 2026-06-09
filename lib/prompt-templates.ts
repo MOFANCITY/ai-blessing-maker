@@ -4,15 +4,15 @@
  * 支持两种模式：经典模板模式和智能描述模式
  */
 interface BlessingRequest {
-  occasion?: string;          // 场合类型（经典模式使用）
-  festival?: string;          // 节日类型（经典模式使用）
-  targetPerson?: string;      // 目标人群（经典模式使用）
-  style?: string;             // 祝福语风格（可选）
+  occasion?: string; // 场合类型（经典模式使用）
+  festival?: string; // 节日类型（经典模式使用）
+  targetPerson?: string; // 目标人群（经典模式使用）
+  style?: string; // 祝福语风格（可选）
   customDescription?: string; // 用户自定义描述（智能模式使用）
-  useSmartMode?: boolean;     // 是否使用智能模式
-  timestamp?: number;         // 时间戳（可选）
+  useSmartMode?: boolean; // 是否使用智能模式
+  timestamp?: number; // 时间戳（可选）
   version?: string;
-  userProfile?: 'elderly' | 'standard' | 'young'; // 用户群配置，用于调整语气风格
+  userProfile?: "elderly" | "standard" | "young"; // 用户群配置，用于调整语气风格
 }
 
 /**
@@ -65,7 +65,7 @@ export function createTemplatePrompt(options: BlessingRequest): string {
 
   // 检查必需参数
   if (!occasion || !targetPerson) {
-    throw new Error('经典模式需要提供场合和目标人群');
+    throw new Error("经典模式需要提供场合和目标人群");
   }
 
   return `
@@ -111,15 +111,21 @@ export function createBlessingPrompt(options: BlessingRequest): string {
  * @param theme - 对联主题
  * @param difficulty - 难度等级 ('simple' | 'medium' | 'hard')，影响字数范围
  */
-export function createCoupletUpperPrompt(theme: string, difficulty?: 'simple' | 'medium' | 'hard'): string {
+export function createCoupletUpperPrompt(
+  theme: string,
+  difficulty?: "simple" | "medium" | "hard",
+): string {
   // 根据难度确定字数范围
-  const difficultyMap: Record<string, { min: number; max: number; desc: string }> = {
-    'simple': { min: 4, max: 5, desc: '4-5' },
-    'medium': { min: 6, max: 8, desc: '6-8' },
-    'hard': { min: 9, max: 14, desc: '9-14' }
+  const difficultyMap: Record<
+    string,
+    { min: number; max: number; desc: string }
+  > = {
+    simple: { min: 4, max: 5, desc: "4-5" },
+    medium: { min: 6, max: 8, desc: "6-8" },
+    hard: { min: 9, max: 14, desc: "9-14" },
   };
 
-  const targetDifficulty = difficultyMap[difficulty || 'medium'];
+  const targetDifficulty = difficultyMap[difficulty || "medium"];
   const charRange = `${targetDifficulty.min}-${targetDifficulty.max}`;
 
   return `
@@ -148,21 +154,35 @@ export function createCoupletUpperPrompt(theme: string, difficulty?: 'simple' | 
  * @param target - 涉及人物（可选，最多 50 字）
  * @returns 完整的 AI 提示词
  */
-export function createDissPrompt(situation: string, tone: string, target?: string): string {
+export function createDissPrompt(
+  situation: string,
+  tone: string,
+  target?: string,
+): string {
   const TONE_GUIDANCE: Record<string, string> = {
-    '优雅反击': '礼貌但寸步不让，措辞得体不丢气场，让对方挑不出礼节上的毛病',
-    '一针见血': '直击对方逻辑漏洞或话术软肋，简洁利落，不绕弯子',
-    '幽默调侃': '用轻松甚至自嘲的方式消解攻击，让旁观者会心一笑、对方有苦说不出',
-    '高级讽刺': '言此意彼、绵里藏针，表面上夸实际在损，对方回看才能品出味道',
-    '直接怼': '直白清晰但绝不爆粗口、不进行人身攻击，把话说明白',
-    '捧杀式': '先顺着对方的话把对方"捧"到一个他自己站不住的位置上，让他自己打脸',
+    优雅反击: "礼貌但寸步不让，措辞得体不丢气场，让对方挑不出礼节上的毛病",
+    一针见血: "直击对方逻辑漏洞或话术软肋，简洁利落，不绕弯子",
+    幽默调侃: "用轻松甚至自嘲的方式消解攻击，让旁观者会心一笑、对方有苦说不出",
+    高级讽刺: "言此意彼、绵里藏针，表面上夸实际在损，对方回看才能品出味道",
+    直接怼: "直白清晰但绝不爆粗口、不进行人身攻击，把话说明白",
+    捧杀式: '先顺着对方的话把对方"捧"到一个他自己站不住的位置上，让他自己打脸',
   };
 
-  const toneDesc = TONE_GUIDANCE[tone] || TONE_GUIDANCE['优雅反击'];
+  const toneDesc = TONE_GUIDANCE[tone] || TONE_GUIDANCE["优雅反击"];
 
-  const targetLine = target && target.trim().length > 0
-    ? `\n涉及人物：${target}\n`
-    : '';
+  const targetLine =
+    target && target.trim().length > 0 ? `\n涉及人物：${target}\n` : "";
+
+  // 根据人物关系动态调整语气尺度
+  const roleGuidance = target
+    ? {
+        上司: "对方是上司，语气需留余地，保持专业感，不能太硬，要让自己立于不败之地而非激化矛盾",
+        同级: "对方是同级同事，可以相对直接，但仍需顾及日后相处",
+        下属: "对方是下属，回击需体现身份感和格局，不能显得斤斤计较",
+        朋友: "对方是朋友，可以轻松幽默，有来有往，点到为止",
+        亲戚: "对方是亲戚，可以幽默，点到为止",
+      }[target]
+    : "";
 
   return `
 # Role
@@ -173,16 +193,29 @@ export function createDissPrompt(situation: string, tone: string, target?: strin
 
 场景 / 对方原话：${situation}${targetLine}
 
+# 回击结构参考（优先使用以下三段式）
+1. 【先承认】适当承认对方攻击点中合理的部分，显得大度、不玻璃心，让对方失去继续攻击的支点
+2. 【转移战场】不在对方占优的维度恋战，开辟对自己有利的新维度
+3. 【反将一军】用对方的逻辑或标准，反手打回去
+
+示例：对方说"你唱歌真难听" → 回击："我唱歌确实不好听，但你说话比我唱歌还难听。"
+（先承认唱歌差 → 转移到"说话"维度 → 用同一标准反将）
+
 # Requirements
 1. 风格执行：${tone}——${toneDesc}
 2. 长度：30-150 个汉字，节奏紧凑，不要写成段落
-3. 底线红线（必须遵守）：
+3. 语气尺度：${roleGuidance || "根据场景自行判断语气轻重"}
+4. 底线红线（必须遵守）：
    - 不使用任何形式的脏话、咒骂、爆粗口
    - 不进行人身攻击（不攻击对方外貌、家庭、学历、收入等）
    - 不煽动仇恨，不针对任何受保护群体（种族、性别、宗教、地域、性取向、年龄等）
    - 不涉及政治敏感话题、暴力威胁、违法教唆
-4. 如果原话涉及以上红线，请用得体、聪明的方式礼貌拒绝或巧妙转移，不要硬怼
-5. 保持中文口语感，自然流畅，不要口号化或模板化
+5. 回击效果目标：
+  - 让说话者自己意识到失态或逻辑矛盾
+  - 不给对方继续攻击的话头
+  - 让第三方听了觉得你有理有据、不失风度
+6. 如果原话涉及以上红线，请用得体、聪明的方式礼貌拒绝或巧妙转移，不要硬怼
+7. 保持中文口语感，自然流畅，不要口号化或模板化
 
 # Output
 只输出回击文案本身，一段话，不带任何前缀、引号、标题、解释、表情符号。
@@ -198,16 +231,19 @@ export function createDissPrompt(situation: string, tone: string, target?: strin
 export function createCoupletReviewPrompt(
   upperLine: string,
   lowerLine: string,
-  difficulty?: 'simple' | 'medium' | 'hard'
+  difficulty?: "simple" | "medium" | "hard",
 ): string {
   // 根据难度确定字数范围，用于评下联
-  const difficultyMap: Record<string, { min: number; max: number; desc: string }> = {
-    'simple': { min: 4, max: 5, desc: '4-5' },
-    'medium': { min: 6, max: 8, desc: '6-8' },
-    'hard': { min: 9, max: 14, desc: '9-14' }
+  const difficultyMap: Record<
+    string,
+    { min: number; max: number; desc: string }
+  > = {
+    simple: { min: 4, max: 5, desc: "4-5" },
+    medium: { min: 6, max: 8, desc: "6-8" },
+    hard: { min: 9, max: 14, desc: "9-14" },
   };
 
-  const targetDifficulty = difficultyMap[difficulty || 'medium'];
+  const targetDifficulty = difficultyMap[difficulty || "medium"];
   const charRange = `${targetDifficulty.min}-${targetDifficulty.max}`;
 
   return `
@@ -243,17 +279,19 @@ export function createCoupletReviewPrompt(
  * @param userProfile - 用户群类型
  * @returns 语气指导文本，插入到 prompt 的 Requirements 部分
  */
-function getUserProfileToneGuidance(userProfile?: 'elderly' | 'standard' | 'young'): string {
+function getUserProfileToneGuidance(
+  userProfile?: "elderly" | "standard" | "young",
+): string {
   switch (userProfile) {
-    case 'elderly':
+    case "elderly":
       return `
 0. 语气风格：使用长辈熟悉的表达方式，语速感舒缓，多用"祝您""愿您"等敬语，避免网络流行语和缩写。
 `;
-    case 'young':
+    case "young":
       return `
 0. 语气风格：轻松活泼，可适当使用表情符号（如✨🎉💪）和网络热词，语言年轻化有网感，但保持真诚不油腻。
 `;
-    case 'standard':
+    case "standard":
     default:
       return `
 0. 语气风格：通用友好，平衡正式与亲切，适合大多数社交场景，避免极端口语化或过于书面化。
@@ -282,21 +320,21 @@ function getUserProfileToneGuidance(userProfile?: 'elderly' | 'standard' | 'youn
  * @returns 完整的 AI 提示词
  */
 export function createPoemPrompt(
-  type: 'poem5' | 'poem7',
+  type: "poem5" | "poem7",
   theme: string,
   gameMode?: boolean,
-  extras?: string
+  extras?: string,
 ): string {
-  const charPerLine = type === 'poem7' ? 7 : 5;
-  const typeLabel = type === 'poem7' ? '七言' : '五言';
+  const charPerLine = type === "poem7" ? 7 : 5;
+  const typeLabel = type === "poem7" ? "七言" : "五言";
 
   if (gameMode) {
-    const userLines = (extras || '').split('\n').map((l) => l.trim());
+    const userLines = (extras || "").split("\n").map((l) => l.trim());
     const safeLines = [
-      userLines[0] || '（空）',
-      userLines[1] || '（空）',
-      userLines[2] || '（空）',
-      userLines[3] || '（空）',
+      userLines[0] || "（空）",
+      userLines[1] || "（空）",
+      userLines[2] || "（空）",
+      userLines[3] || "（空）",
     ];
 
     return `
@@ -329,9 +367,8 @@ export function createPoemPrompt(
 只输出点评文字，一段话，不带任何前缀、引号、标题、解释。`.trim();
   }
 
-  const extrasLine = extras && extras.trim().length > 0
-    ? `\n额外要求：${extras}\n`
-    : '';
+  const extrasLine =
+    extras && extras.trim().length > 0 ? `\n额外要求：${extras}\n` : "";
 
   return `
 # Role
