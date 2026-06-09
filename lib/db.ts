@@ -10,6 +10,7 @@ export const TABLES = {
   USER_HISTORY: "user_history",
   DISS_RECORDS: "diss_records",
   POEM_RECORDS: "poem_records",
+  FAVORITES: "favorites",
 };
 
 // 怼人记录表（运行时幂等创建）
@@ -649,5 +650,140 @@ export const dissDb = {
       args: [userId, Math.max(1, Math.min(100, limit))],
     });
     return result.rows;
+  },
+};
+
+// ========================
+// 收藏相关数据库操作
+// ========================
+
+let favoritesTableReady: Promise<void> | null = null;
+function ensureFavoritesTable() {
+  if (favoritesTableReady) return favoritesTableReady;
+  favoritesTableReady = db
+    .execute(
+      `CREATE TABLE IF NOT EXISTS favorites (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL,
+        content_type TEXT NOT NULL,
+        content_id TEXT,
+        title TEXT NOT NULL,
+        content TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      )`,
+    )
+    .then(() =>
+      db.execute(
+        `CREATE INDEX IF NOT EXISTS idx_favorites_user_type_created
+          ON favorites (user_id, content_type, created_at DESC)`,
+      ),
+    )
+    .then(() => undefined)
+    .catch((err) => {
+      favoritesTableReady = null;
+      throw err;
+    });
+  return favoritesTableReady;
+}
+
+export const favoriteDb = {
+  /**
+   * 添加收藏
+   */
+  async addFavorite(data: {
+    user_id: string;
+    content_type: "blessing" | "diss" | "couplet" | "poem";
+    content_id?: string | null;
+    title: string;
+    content: string;
+  }) {
+    await ensureFavoritesTable();
+    const createdAt = Date.now();
+    const result = await db.execute({
+      sql: `INSERT INTO favorites
+            (user_id, content_type, content_id, title, content, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            RETURNING *`,
+      args: [
+        data.user_id,
+        data.content_type,
+        data.content_id ?? null,
+        data.title,
+        data.content,
+        createdAt,
+      ],
+    });
+    return result.rows[0];
+  },
+
+  /**
+   * 取消收藏
+   */
+  async removeFavorite(favoriteId: number | string, userId: string) {
+    await ensureFavoritesTable();
+    const result = await db.execute({
+      sql: `DELETE FROM favorites
+            WHERE id = ? AND user_id = ?
+            RETURNING *`,
+      args: [favoriteId, userId],
+    });
+    return result.rows[0] ?? null;
+  },
+
+  /**
+   * 获取用户收藏列表
+   */
+  async getUserFavorites(
+    userId: string,
+    options?: { contentType?: string; limit?: number; offset?: number },
+  ) {
+    await ensureFavoritesTable();
+    const limit = Math.max(1, Math.min(100, options?.limit ?? 50));
+    const offset = options?.offset ?? 0;
+
+    let sql = `SELECT * FROM favorites WHERE user_id = ?`;
+    const args: unknown[] = [userId];
+
+    if (options?.contentType) {
+      sql += ` AND content_type = ?`;
+      args.push(options.contentType);
+    }
+
+    sql += ` ORDER BY created_at DESC LIMIT ? OFFSET ?`;
+    args.push(limit, offset);
+
+    const result = await db.execute({ sql, args });
+    return result.rows;
+  },
+
+  /**
+   * 获取用户收藏总数
+   */
+  async getUserFavoritesCount(userId: string, contentType?: string) {
+    await ensureFavoritesTable();
+    let sql = `SELECT COUNT(*) as total FROM favorites WHERE user_id = ?`;
+    const args: unknown[] = [userId];
+
+    if (contentType) {
+      sql += ` AND content_type = ?`;
+      args.push(contentType);
+    }
+
+    const result = await db.execute({ sql, args });
+    return Number(result.rows[0].total);
+  },
+
+  /**
+   * 检查是否已收藏
+   */
+  async isFavorited(userId: string, contentType: string, contentId: string) {
+    await ensureFavoritesTable();
+    const result = await db.execute({
+      sql: `SELECT id FROM favorites
+            WHERE user_id = ? AND content_type = ? AND content_id = ?
+            LIMIT 1`,
+      args: [userId, contentType, contentId],
+    });
+    return result.rows.length > 0;
   },
 };
