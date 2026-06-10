@@ -6,18 +6,21 @@
 
 /** 积分检查与扣减结果 */
 export type CreditsCheckResult =
-  | { ok: true; usedFree: boolean; balanceAfter: number }
-  | { ok: false; code: "INSUFFICIENT_CREDITS"; balance: number; needed: number };
+  | { ok: true; balanceAfter: number }
+  | {
+      ok: false;
+      code: "INSUFFICIENT_CREDITS";
+      balance: number;
+      needed: number;
+    };
 
 /** 用户积分概览 */
 export interface CreditsInfo {
   balance: number;
-  dailyFreeUsed: number;
-  dailyFreeLimit: number;
-  dailyShareCount: number;
-  dailyShareLimit: number;
   lastCheckinDate: string | null;
   canCheckinToday: boolean;
+  lastDailyOpenDate: string | null;
+  canClaimDailyOpen: boolean;
   totalEarned: number;
   totalSpent: number;
 }
@@ -27,12 +30,12 @@ export type CheckinResult =
   | { ok: true; reward: number; balanceAfter: number }
   | { ok: false; reason: "already_checked_in" };
 
-/** 分享奖励结果 */
-export type ShareRewardResult =
-  | { ok: true; reward: number; balanceAfter: number; dailyRemaining: number }
-  | { ok: false; reason: "daily_limit_reached" };
+/** 每日打开奖励结果 */
+export type DailyOpenResult =
+  | { ok: true; reward: number; balanceAfter: number }
+  | { ok: false; reason: "already_claimed" };
 
-/** 积分交易记录（数据库行） */
+/** 积分交易记录（行记录） */
 export interface CreditsTransactionRow {
   id: number;
   openid: string;
@@ -44,15 +47,22 @@ export interface CreditsTransactionRow {
   created_at: number;
 }
 
+/** 积分交易记录（API 返回格式） */
+export interface TransactionItem {
+  id: number;
+  type: "earn" | "spend";
+  amount: number;
+  balanceAfter: number;
+  reason: string;
+  createdAt: number;
+}
+
 /** 用户积分记录（数据库行） */
 export interface UserCreditsRow {
   openid: string;
   balance: number;
-  daily_free_used: number;
-  daily_share_count: number;
-  last_free_reset_date: string | null;
-  last_share_reset_date: string | null;
   last_checkin_date: string | null;
+  last_open_date: string | null;
   total_earned: number;
   total_spent: number;
   created_at: string;
@@ -63,7 +73,6 @@ export interface UserCreditsRow {
 export type CreditsReason =
   | "new_user"
   | "checkin"
-  | "share"
+  | "daily_open"
   | "ai_usage"
-  | "first_use"
   | "admin_adjust";

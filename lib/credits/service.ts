@@ -14,19 +14,19 @@
 
 import type { Client } from "@libsql/client/http";
 import {
-  DAILY_FREE_LIMIT,
   COST_PER_USAGE,
   CHECKIN_REWARD,
-  SHARE_REWARD,
-  DAILY_SHARE_LIMIT,
+  DAILY_OPEN_BONUS,
   NEW_USER_BONUS,
 } from "./config";
 import type {
   CreditsCheckResult,
   CreditsInfo,
   CheckinResult,
-  ShareRewardResult,
+  DailyOpenResult,
   UserCreditsRow,
+  CreditsTransactionRow,
+  TransactionItem,
   CreditsReason,
 } from "./types";
 
@@ -39,15 +39,8 @@ const nowISO = (): string => new Date().toISOString();
 const nowTs = (): number => Date.now();
 
 // ============================================================
-// 数据库层 —— 内聚在此，不单独抽取文件以保持简洁
-// 如果未来需要复杂迁移，可独立为 db.ts
+// 数据库层
 // ============================================================
-
-function sqlQuote(val: unknown): string {
-  if (val === null || val === undefined) return "NULL";
-  if (typeof val === "number") return String(val);
-  return `'${String(val).replace(/'/g, "''")}'`;
-}
 
 let _tablesReady: Promise<void> | null = null;
 
@@ -58,11 +51,8 @@ async function ensureTables(db: Client): Promise<void> {
       CREATE TABLE IF NOT EXISTS user_credits (
         openid TEXT PRIMARY KEY,
         balance INTEGER NOT NULL DEFAULT 0,
-        daily_free_used INTEGER NOT NULL DEFAULT 0,
-        daily_share_count INTEGER NOT NULL DEFAULT 0,
-        last_free_reset_date TEXT,
-        last_share_reset_date TEXT,
         last_checkin_date TEXT,
+        last_open_date TEXT,
         total_earned INTEGER NOT NULL DEFAULT 0,
         total_spent INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL,
@@ -116,40 +106,48 @@ async function insertTransaction(
   });
 }
 
+// ============================================================
+// 查询接口
+// ============================================================
+
 /**
  * 将原始数据库行转为 CreditsInfo 对象
- * 自动处理跨日重置
  */
 function toCreditsInfo(row: UserCreditsRow | null): CreditsInfo {
   const td = todayStr();
   if (!row) {
     return {
       balance: 0,
-      dailyFreeUsed: 0,
-      dailyFreeLimit: DAILY_FREE_LIMIT,
-      dailyShareCount: 0,
-      dailyShareLimit: DAILY_SHARE_LIMIT,
       lastCheckinDate: null,
       canCheckinToday: true,
+      lastDailyOpenDate: null,
+      canClaimDailyOpen: true,
       totalEarned: 0,
       totalSpent: 0,
     };
   }
-  const sameDay = (stored: string | null) => stored === td;
   return {
     balance: Number(row.balance),
-    dailyFreeUsed: sameDay(row.last_free_reset_date)
-      ? Number(row.daily_free_used)
-      : 0,
-    dailyFreeLimit: DAILY_FREE_LIMIT,
-    dailyShareCount: sameDay(row.last_share_reset_date)
-      ? Number(row.daily_share_count)
-      : 0,
-    dailyShareLimit: DAILY_SHARE_LIMIT,
     lastCheckinDate: row.last_checkin_date ?? null,
     canCheckinToday: row.last_checkin_date !== td,
+    lastDailyOpenDate: row.last_open_date ?? null,
+    canClaimDailyOpen: row.last_open_date !== td,
     totalEarned: Number(row.total_earned),
     totalSpent: Number(row.total_spent),
+  };
+}
+
+/**
+ * 将数据库行转为 API 返回格式
+ */
+function toTransactionItem(row: CreditsTransactionRow): TransactionItem {
+  return {
+    id: Number(row.id),
+    type: row.type,
+    amount: Number(row.amount),
+    balanceAfter: Number(row.balance_after),
+    reason: row.reason,
+    createdAt: Number(row.created_at),
   };
 }
 
@@ -166,16 +164,12 @@ export async function initNewUser(
   openid: string,
 ): Promise<boolean> {
   await ensureTables(db);
-  const td = todayStr();
   const iso = nowISO();
   const result = await db.execute({
-    sql: `INSERT INTO user_credits (openid, balance, daily_free_used, daily_share_count,
-           last_free_reset_date, last_share_reset_date,
-           total_earned, total_spent, created_at, updated_at)
-          VALUES (?, 0, 0, 0, ?, ?, 0, 0, ?, ?)`,
-    args: [openid, td, td, iso, iso],
+    sql: `INSERT INTO user_credits (openid, balance, total_earned, total_spent, created_at, updated_at)
+          VALUES (?, 0, 0, 0, ?, ?)`,
+    args: [openid, iso, iso],
   });
-  // INSERT OR IGNORE 语义：如果已存在则忽略
   if (result.rowsAffected === 0) return false;
   // 赠送新用户积分
   await addCredits(db, openid, NEW_USER_BONUS, "new_user");
@@ -203,9 +197,8 @@ export async function getCreditsInfo(
  * 检查并扣除积分（每次 AI 调用前执行）
  *
  * 规则：
- *   1. 先消耗每日免费额度（前 N 次免费）
- *   2. 免费额度用尽后消耗积分余额
- *   3. 积分不足时返回失败
+ *   1. 直接检查余额是否足够
+ *   2. 余额不足时返回失败
  */
 export async function checkAndDeduct(
   db: Client,
@@ -214,7 +207,6 @@ export async function checkAndDeduct(
 ): Promise<CreditsCheckResult> {
   await ensureTables(db);
 
-  const td = todayStr();
   const row = await db.execute({
     sql: "SELECT * FROM user_credits WHERE openid = ? LIMIT 1",
     args: [openid],
@@ -231,22 +223,7 @@ export async function checkAndDeduct(
 
   const r = row.rows[0] as unknown as UserCreditsRow;
   const balance = Number(r.balance);
-  const isSameDay = r.last_free_reset_date === td;
-  let dailyFreeUsed = isSameDay ? Number(r.daily_free_used) : 0;
 
-  // ── 优先使用免费额度 ──
-  if (dailyFreeUsed < DAILY_FREE_LIMIT) {
-    dailyFreeUsed++;
-    await db.execute({
-      sql: `UPDATE user_credits
-            SET daily_free_used = ?, last_free_reset_date = ?, updated_at = ?
-            WHERE openid = ?`,
-      args: [dailyFreeUsed, td, nowISO(), openid],
-    });
-    return { ok: true, usedFree: true, balanceAfter: balance };
-  }
-
-  // ── 免费额度用完，检查积分余额 ──
   if (balance < COST_PER_USAGE) {
     return {
       ok: false,
@@ -256,14 +233,13 @@ export async function checkAndDeduct(
     };
   }
 
-  // ── 扣减积分 ──
+  // 扣减积分
   const newBalance = balance - COST_PER_USAGE;
   await db.execute({
     sql: `UPDATE user_credits
-          SET balance = ?, total_spent = total_spent + ?,
-              last_free_reset_date = ?, updated_at = ?
+          SET balance = ?, total_spent = total_spent + ?, updated_at = ?
           WHERE openid = ?`,
-    args: [newBalance, COST_PER_USAGE, td, nowISO(), openid],
+    args: [newBalance, COST_PER_USAGE, nowISO(), openid],
   });
   await insertTransaction(db, {
     openid,
@@ -274,11 +250,11 @@ export async function checkAndDeduct(
     metadata: feature ? { feature } : undefined,
   });
 
-  return { ok: true, usedFree: false, balanceAfter: newBalance };
+  return { ok: true, balanceAfter: newBalance };
 }
 
 /**
- * 为用户增加积分（签到/分享奖励/管理员调整）
+ * 为用户增加积分
  */
 export async function addCredits(
   db: Client,
@@ -295,15 +271,11 @@ export async function addCredits(
   });
 
   if (!row.rows[0]) {
-    // 如果用户还没有积分记录，先初始化
-    const td = todayStr();
     const iso = nowISO();
     await db.execute({
-      sql: `INSERT INTO user_credits (openid, balance, daily_free_used, daily_share_count,
-             last_free_reset_date, last_share_reset_date,
-             total_earned, total_spent, created_at, updated_at)
-            VALUES (?, 0, 0, 0, ?, ?, 0, 0, ?, ?)`,
-      args: [openid, td, td, iso, iso],
+      sql: `INSERT INTO user_credits (openid, balance, total_earned, total_spent, created_at, updated_at)
+            VALUES (?, 0, 0, 0, ?, ?)`,
+      args: [openid, iso, iso],
     });
   }
 
@@ -323,7 +295,7 @@ export async function addCredits(
     type: "earn",
     amount,
     balanceAfter: newBalance,
-    reason: reason as CreditsReason,
+    reason,
     metadata,
   });
 
@@ -363,47 +335,60 @@ export async function dailyCheckin(
 }
 
 /**
- * 分享奖励（每日有次数上限）
+ * 每日打开小程序奖励（每人每天 1 次）
  */
-export async function shareReward(
+export async function dailyOpenBonus(
   db: Client,
   openid: string,
-): Promise<ShareRewardResult> {
+): Promise<DailyOpenResult> {
   await ensureTables(db);
 
-  const td = todayStr();
   const row = await db.execute({
-    sql: "SELECT * FROM user_credits WHERE openid = ? LIMIT 1",
+    sql: "SELECT last_open_date FROM user_credits WHERE openid = ? LIMIT 1",
     args: [openid],
   });
 
-  if (!row.rows[0]) {
-    return { ok: false, reason: "daily_limit_reached" };
+  const td = todayStr();
+  if (
+    row.rows[0] &&
+    (row.rows[0] as unknown as UserCreditsRow).last_open_date === td
+  ) {
+    return { ok: false, reason: "already_claimed" };
   }
 
-  const r = row.rows[0] as unknown as UserCreditsRow;
-  const isSameDay = r.last_share_reset_date === td;
-  const shareCount = isSameDay ? Number(r.daily_share_count) : 0;
-
-  if (shareCount >= DAILY_SHARE_LIMIT) {
-    return { ok: false, reason: "daily_limit_reached" };
-  }
-
-  const newShareCount = shareCount + 1;
+  const newBalance = await addCredits(
+    db,
+    openid,
+    DAILY_OPEN_BONUS,
+    "daily_open",
+  );
 
   await db.execute({
-    sql: `UPDATE user_credits
-          SET daily_share_count = ?, last_share_reset_date = ?, updated_at = ?
-          WHERE openid = ?`,
-    args: [newShareCount, td, nowISO(), openid],
+    sql: "UPDATE user_credits SET last_open_date = ?, updated_at = ? WHERE openid = ?",
+    args: [td, nowISO(), openid],
   });
 
-  const newBalance = await addCredits(db, openid, SHARE_REWARD, "share");
+  return { ok: true, reward: DAILY_OPEN_BONUS, balanceAfter: newBalance };
+}
 
-  return {
-    ok: true,
-    reward: SHARE_REWARD,
-    balanceAfter: newBalance,
-    dailyRemaining: DAILY_SHARE_LIMIT - newShareCount,
-  };
+/**
+ * 获取积分交易流水
+ */
+export async function getTransactionHistory(
+  db: Client,
+  openid: string,
+  limit = 50,
+  offset = 0,
+): Promise<TransactionItem[]> {
+  await ensureTables(db);
+  const result = await db.execute({
+    sql: `SELECT * FROM credits_transactions
+          WHERE openid = ?
+          ORDER BY created_at DESC
+          LIMIT ? OFFSET ?`,
+    args: [openid, Math.max(1, Math.min(100, limit)), Math.max(0, offset)],
+  });
+  return (result.rows as unknown as CreditsTransactionRow[]).map(
+    toTransactionItem,
+  );
 }

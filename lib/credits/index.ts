@@ -8,21 +8,28 @@
  *   const result = await checkAndDeduct(db, openid, "blessing");
  */
 
-export { initNewUser, getCreditsInfo, checkAndDeduct, addCredits, dailyCheckin, shareReward } from "./service";
+export {
+  initNewUser,
+  getCreditsInfo,
+  checkAndDeduct,
+  addCredits,
+  dailyCheckin,
+  dailyOpenBonus,
+  getTransactionHistory,
+} from "./service";
 
 export type {
   CreditsCheckResult,
   CreditsInfo,
   CheckinResult,
-  ShareRewardResult,
+  DailyOpenResult,
+  TransactionItem,
   CreditsReason,
 } from "./types";
 
 export {
-  DAILY_FREE_LIMIT,
   COST_PER_USAGE,
   CHECKIN_REWARD,
-  SHARE_REWARD,
-  DAILY_SHARE_LIMIT,
+  DAILY_OPEN_BONUS,
   NEW_USER_BONUS,
 } from "./config";
