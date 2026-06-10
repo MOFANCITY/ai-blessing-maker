@@ -5,7 +5,14 @@ import { createDissPrompt } from "@/lib/prompt-templates";
 import { validateDissInput } from "@/lib/validation";
 import { dissDb } from "@/lib/db";
 
-const VALID_TONES = ['优雅反击', '一针见血', '幽默调侃', '高级讽刺', '直接怼', '捧杀式'] as const;
+const VALID_TONES = [
+  "优雅反击",
+  "一针见血",
+  "幽默调侃",
+  "高级讽刺",
+  "直接怼",
+  "捧杀式",
+] as const;
 
 interface DissRequest {
   situation?: unknown;
@@ -36,9 +43,7 @@ function resolveAuth(req: NextRequest): { openid: string } | null {
   try {
     const parts = token.split(".");
     if (parts.length !== 3) return null;
-    const payload = parts[1]
-      .replace(/-/g, "+")
-      .replace(/_/g, "/");
+    const payload = parts[1].replace(/-/g, "+").replace(/_/g, "/");
     const padded = payload + "=".repeat((4 - (payload.length % 4)) % 4);
     const decoded = JSON.parse(Buffer.from(padded, "base64").toString());
     if (typeof decoded.openid === "string" && decoded.openid.length > 0) {
@@ -58,7 +63,7 @@ export async function POST(req: NextRequest) {
       if (!userAgent.includes("MicroMessenger")) {
         return NextResponse.json(
           { error: "此应用仅支持微信小程序访问，请在微信中打开" },
-          { status: 403 }
+          { status: 403 },
         );
       }
     }
@@ -83,8 +88,9 @@ export async function POST(req: NextRequest) {
     const diss = await generateBlessing(prompt);
 
     // Best-effort DB save; never block the response on it.
+    let dissId: number | undefined;
     try {
-      await dissDb.insertDissRecord({
+      const record = await dissDb.insertDissRecord({
         user_id: auth.openid,
         situation,
         tone,
@@ -92,6 +98,7 @@ export async function POST(req: NextRequest) {
         preset_id: presetId ?? null,
         result: diss,
       });
+      dissId = record?.id;
     } catch (dbError) {
       console.error("插入怼人记录失败:", dbError);
     }
@@ -101,6 +108,7 @@ export async function POST(req: NextRequest) {
       diss,
       tone,
       situation,
+      dissId: dissId ?? null,
     });
   } catch (error) {
     console.error("生成回击失败:", error);
@@ -109,7 +117,10 @@ export async function POST(req: NextRequest) {
     if (axios.isAxiosError(error)) {
       if (error.response?.status === 429) {
         errorMessage = "请求太频繁，请稍后再试";
-      } else if (error.response?.status === 401 || error.response?.status === 403) {
+      } else if (
+        error.response?.status === 401 ||
+        error.response?.status === 403
+      ) {
         errorMessage = "服务暂时不可用";
       }
     } else if (error instanceof Error && error.message.includes("429")) {
