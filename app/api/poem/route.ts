@@ -3,46 +3,15 @@ import axios from "axios";
 import { generateBlessing } from "@/lib/ai-service";
 import { createPoemPrompt } from "@/lib/prompt-templates";
 import { validatePoemInput } from "@/lib/validation";
+import { db } from "@/lib/db";
+import { resolveAuth, isWeChatRequest } from "@/lib/api-auth";
+import { checkAndDeduct } from "@/lib/credits";
 
 interface PoemRequest {
   type?: unknown;
   theme?: unknown;
   gameMode?: unknown;
   extras?: unknown;
-}
-
-function resolveAuth(req: NextRequest): { openid: string } | null {
-  const isDevelopment = process.env.NODE_ENV === "development";
-  if (isDevelopment) {
-    return { openid: "dev_openid_12345" };
-  }
-
-  const userAgent = req.headers.get("user-agent") || "";
-  if (!userAgent.includes("MicroMessenger")) {
-    return null;
-  }
-
-  const token =
-    req.cookies.get("auth_token")?.value ||
-    req.headers.get("Authorization")?.replace("Bearer ", "");
-
-  if (!token) return null;
-
-  // Inline lightweight decode to avoid coupling this route to a specific auth lib.
-  // In dev we never reach here; production callers must send a real token.
-  try {
-    const parts = token.split(".");
-    if (parts.length !== 3) return null;
-    const payload = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-    const padded = payload + "=".repeat((4 - (payload.length % 4)) % 4);
-    const decoded = JSON.parse(Buffer.from(padded, "base64").toString());
-    if (typeof decoded.openid === "string" && decoded.openid.length > 0) {
-      return { openid: decoded.openid };
-    }
-  } catch {
-    return null;
-  }
-  return null;
 }
 
 function parsePoemResponse(
@@ -69,15 +38,11 @@ function parsePoemResponse(
 
 export async function POST(req: NextRequest) {
   try {
-    const isDevelopment = process.env.NODE_ENV === "development";
-    if (!isDevelopment) {
-      const userAgent = req.headers.get("user-agent") || "";
-      if (!userAgent.includes("MicroMessenger")) {
-        return NextResponse.json(
-          { error: "此应用仅支持微信小程序访问，请在微信中打开" },
-          { status: 403 },
-        );
-      }
+    if (!isWeChatRequest(req)) {
+      return NextResponse.json(
+        { error: "此应用仅支持微信小程序访问，请在微信中打开" },
+        { status: 403 },
+      );
     }
 
     const auth = resolveAuth(req);
@@ -93,6 +58,20 @@ export async function POST(req: NextRequest) {
 
     const { type, theme, gameMode, extras } = validation.cleaned;
     const expectedCharsPerLine = type === "poem7" ? 7 : 5;
+
+    // ── 积分检查 ──
+    const creditsCheck = await checkAndDeduct(db, auth.openid, "poem");
+    if (!creditsCheck.ok) {
+      return NextResponse.json(
+        {
+          error: "当日免费次数已用尽，积分不足",
+          code: "INSUFFICIENT_CREDITS",
+          balance: creditsCheck.balance,
+          needed: creditsCheck.needed,
+        },
+        { status: 403 },
+      );
+    }
 
     const prompt = createPoemPrompt(type, theme, gameMode, extras);
     const raw = await generateBlessing(prompt);

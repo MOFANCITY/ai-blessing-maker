@@ -1,21 +1,24 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { WechatLoginRequest, UserLoginResponse } from '@/lib/types/auth';
-import { userDb } from '@/lib/db';
-import { verifyToken, generateToken } from '@/lib/auth';
-import * as crypto from 'crypto';
+import { NextRequest, NextResponse } from "next/server";
+import { WechatLoginRequest, UserLoginResponse } from "@/lib/types/auth";
+import { db, userDb } from "@/lib/db";
+import { verifyToken, generateToken } from "@/lib/auth";
+import { initNewUser } from "@/lib/credits";
+import * as crypto from "crypto";
 
 /**
  * 微信登录 API
  * POST /api/auth/wechat/login
  */
-export async function POST(request: NextRequest): Promise<NextResponse<UserLoginResponse | { error: string }>> {
+export async function POST(
+  request: NextRequest,
+): Promise<NextResponse<UserLoginResponse | { error: string }>> {
   try {
     // 验证必需的环境变量
     if (!process.env.WECHAT_APP_ID || !process.env.WECHAT_APP_SECRET) {
-      console.error('微信登录环境变量未配置');
+      console.error("微信登录环境变量未配置");
       return NextResponse.json(
-        { error: '服务配置错误，请联系管理员' },
-        { status: 500 }
+        { error: "服务配置错误，请联系管理员" },
+        { status: 500 },
       );
     }
 
@@ -24,8 +27,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<UserLogin
 
     if (!code) {
       return NextResponse.json(
-        { error: '缺少微信登录凭证 code' },
-        { status: 400 }
+        { error: "缺少微信登录凭证 code" },
+        { status: 400 },
       );
     }
 
@@ -33,20 +36,20 @@ export async function POST(request: NextRequest): Promise<NextResponse<UserLogin
     const wechatResponse = await fetch(
       `https://api.weixin.qq.com/sns/jscode2session?appid=${process.env.WECHAT_APP_ID}&secret=${process.env.WECHAT_APP_SECRET}&js_code=${code}&grant_type=authorization_code`,
       {
-        method: 'GET',
+        method: "GET",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
-      }
+      },
     );
 
     const wechatData = await wechatResponse.json();
 
     if (wechatData.errcode) {
-      console.error('微信登录失败:', wechatData);
+      console.error("微信登录失败:", wechatData);
       return NextResponse.json(
         { error: `微信登录失败: ${wechatData.errmsg}` },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -60,10 +63,15 @@ export async function POST(request: NextRequest): Promise<NextResponse<UserLogin
       user = await userDb.createUser({
         openid,
         unionid: unionid || undefined,
-        nickname: userInfo?.nickName || '微信用户',
+        nickname: userInfo?.nickName || "微信用户",
         avatar_url: userInfo?.avatarUrl || undefined,
       });
-      console.log('新用户创建成功:', user.id);
+      console.log("新用户创建成功:", user.id);
+
+      // 初始化积分并赠送新用户积分
+      await initNewUser(db, openid).then((isNew) => {
+        if (isNew) console.log("新用户积分初始化完成，赠送 10 积分");
+      });
     } else {
       // 更新用户信息
       await userDb.updateUser(openid, {
@@ -71,7 +79,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<UserLogin
         avatar_url: userInfo?.avatarUrl || user.avatar_url,
         last_login_at: true,
       });
-      console.log('用户登录更新:', user.id);
+      console.log("用户登录更新:", user.id);
     }
 
     // 生成 JWT token
@@ -99,14 +107,14 @@ export async function POST(request: NextRequest): Promise<NextResponse<UserLogin
     return NextResponse.json(response, {
       status: 200,
       headers: {
-        'Set-Cookie': `auth_token=${token}; ${cookieOptions}`,
+        "Set-Cookie": `auth_token=${token}; ${cookieOptions}`,
       },
     });
   } catch (error) {
-    console.error('登录处理错误:', error);
+    console.error("登录处理错误:", error);
     return NextResponse.json(
-      { error: '登录失败，请稍后重试' },
-      { status: 500 }
+      { error: "登录失败，请稍后重试" },
+      { status: 500 },
     );
   }
 }
@@ -115,36 +123,29 @@ export async function POST(request: NextRequest): Promise<NextResponse<UserLogin
  * 验证用户并获取用户信息
  * GET /api/auth/wechat/login
  */
-export async function GET(request: NextRequest): Promise<NextResponse<{ user: unknown } | { error: string }>> {
+export async function GET(
+  request: NextRequest,
+): Promise<NextResponse<{ user: unknown } | { error: string }>> {
   try {
     // 从 Cookie 获取 token
-    const token = request.cookies.get('auth_token')?.value;
+    const token = request.cookies.get("auth_token")?.value;
 
     if (!token) {
-      return NextResponse.json(
-        { error: '未登录' },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: "未登录" }, { status: 401 });
     }
 
     // 验证 token
     const decoded = verifyToken(token);
 
     if (!decoded) {
-      return NextResponse.json(
-        { error: '登录已过期' },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: "登录已过期" }, { status: 401 });
     }
 
     // 获取用户信息
     const user = await userDb.getUserByOpenid(decoded.openid);
 
     if (!user) {
-      return NextResponse.json(
-        { error: '用户不存在' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "用户不存在" }, { status: 404 });
     }
 
     return NextResponse.json({
@@ -160,10 +161,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<{ user: un
       },
     });
   } catch (error) {
-    console.error('验证用户失败:', error);
-    return NextResponse.json(
-      { error: '验证失败' },
-      { status: 500 }
-    );
+    console.error("验证用户失败:", error);
+    return NextResponse.json({ error: "验证失败" }, { status: 500 });
   }
 }

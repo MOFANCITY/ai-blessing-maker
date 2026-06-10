@@ -8,7 +8,8 @@ import {
   validateCoupletReviewRequest,
 } from "@/lib/couplet-validation";
 import { resolveCoupletAuth } from "@/lib/couplet-api-auth";
-import { coupletDb, userStatsDb } from "@/lib/db";
+import { db, coupletDb, userStatsDb } from "@/lib/db";
+import { checkAndDeduct } from "@/lib/credits";
 
 export async function POST(req: NextRequest) {
   try {
@@ -18,7 +19,7 @@ export async function POST(req: NextRequest) {
       if (!userAgent.includes("MicroMessenger")) {
         return NextResponse.json(
           { error: "此应用仅支持微信小程序访问，请在微信中打开" },
-          { status: 403 }
+          { status: 403 },
         );
       }
     }
@@ -28,6 +29,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "用户未登录" }, { status: 401 });
     }
 
+    // ── 积分检查 ──
+    const creditsCheck = await checkAndDeduct(
+      db,
+      auth.openid,
+      "couplet_review",
+    );
+    if (!creditsCheck.ok) {
+      return NextResponse.json(
+        {
+          error: "当日免费次数已用尽，积分不足",
+          code: "INSUFFICIENT_CREDITS",
+          balance: creditsCheck.balance,
+          needed: creditsCheck.needed,
+        },
+        { status: 403 },
+      );
+    }
+
     const body = await req.json();
     const validation = validateCoupletReviewRequest(body);
     if (!validation.valid) {
@@ -35,18 +54,18 @@ export async function POST(req: NextRequest) {
     }
 
     // 如果有 recordId，从数据库获取难度信息
-    let difficulty: 'simple' | 'medium' | 'hard' | undefined = 'medium';
+    let difficulty: "simple" | "medium" | "hard" | undefined = "medium";
     if (validation.recordId) {
       const record = await coupletDb.getCoupletRecord(validation.recordId);
       if (record && record.difficulty) {
-        difficulty = record.difficulty as 'simple' | 'medium' | 'hard';
+        difficulty = record.difficulty as "simple" | "medium" | "hard";
       }
     }
 
     const prompt = createCoupletReviewPrompt(
       validation.upperLine!,
       validation.lowerLine!,
-      difficulty
+      difficulty,
     );
     const raw = await generateBlessing(prompt);
     const review = parseCoupletReviewJson(raw);
@@ -57,7 +76,7 @@ export async function POST(req: NextRequest) {
           error: "对联内容不符合分享要求，请修改后重试",
           review: COUPLET_REVIEW_FALLBACK,
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -68,7 +87,7 @@ export async function POST(req: NextRequest) {
         validation.lowerLine!,
         review.score,
         review.summary,
-        review.canShare
+        review.canShare,
       );
     }
 

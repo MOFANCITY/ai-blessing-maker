@@ -7,24 +7,36 @@ import {
   validateCoupletUpperRequest,
 } from "@/lib/couplet-validation";
 import { resolveCoupletAuth } from "@/lib/couplet-api-auth";
-import { coupletDb, userStatsDb } from "@/lib/db";
+import { db, coupletDb, userStatsDb } from "@/lib/db";
+import { checkAndDeduct } from "@/lib/credits";
 
 export async function POST(req: NextRequest) {
   try {
-    const isDevelopment = process.env.NODE_ENV === "development";
-    if (!isDevelopment) {
-      const userAgent = req.headers.get("user-agent") || "";
-      if (!userAgent.includes("MicroMessenger")) {
-        return NextResponse.json(
-          { error: "此应用仅支持微信小程序访问，请在微信中打开" },
-          { status: 403 }
-        );
-      }
+    const userAgent = req.headers.get("user-agent") || "";
+    if (!userAgent.includes("MicroMessenger")) {
+      return NextResponse.json(
+        { error: "此应用仅支持微信小程序访问，请在微信中打开" },
+        { status: 403 },
+      );
     }
 
     const auth = resolveCoupletAuth(req);
     if (!auth) {
       return NextResponse.json({ error: "用户未登录" }, { status: 401 });
+    }
+
+    // ── 积分检查 ──
+    const creditsCheck = await checkAndDeduct(db, auth.openid, "couplet");
+    if (!creditsCheck.ok) {
+      return NextResponse.json(
+        {
+          error: "当日免费次数已用尽，积分不足",
+          code: "INSUFFICIENT_CREDITS",
+          balance: creditsCheck.balance,
+          needed: creditsCheck.needed,
+        },
+        { status: 403 },
+      );
     }
 
     const body = await req.json();
@@ -33,14 +45,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: validation.error }, { status: 400 });
     }
 
-    const prompt = createCoupletUpperPrompt(validation.theme!, validation.difficulty);
+    const prompt = createCoupletUpperPrompt(
+      validation.theme!,
+      validation.difficulty,
+    );
     const raw = await generateBlessing(prompt);
     const upperLine = normalizeUpperLineFromAI(raw);
 
     if (!upperLine || [...upperLine].length < 4) {
       return NextResponse.json(
         { error: "生成上联失败，请重试" },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -49,10 +64,14 @@ export async function POST(req: NextRequest) {
       openid: auth.openid,
       upperLine,
       theme: validation.theme!,
-      difficulty: validation.difficulty as 'simple' | 'medium' | 'hard' | undefined,
+      difficulty: validation.difficulty as
+        | "simple"
+        | "medium"
+        | "hard"
+        | undefined,
     });
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       upperLine,
       recordId: record.id,
     });

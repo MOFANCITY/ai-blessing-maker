@@ -10,23 +10,24 @@ import { createBlessingPrompt } from "@/lib/prompt-templates";
 import { validateInput, cleanText } from "@/lib/validation";
 // 数据库客户端
 import { db, historyDb } from "@/lib/db";
-// JWT验证相关
-import { verifyToken } from "@/lib/auth";
+// 认证与积分
+import { resolveAuth, isWeChatRequest } from "@/lib/api-auth";
+import { checkAndDeduct } from "@/lib/credits";
 
 /**
  * API 请求体接口
  * 定义了前端发送的祝福语生成请求的数据结构
  */
 interface BlessingRequest {
-  occasion?: string;          // 场合类型（经典模式）
-  festival?: string;          // 节日类型（经典模式）
-  targetPerson?: string;      // 目标人群（经典模式）
-  style?: string;             // 祝福语风格（可选）
+  occasion?: string; // 场合类型（经典模式）
+  festival?: string; // 节日类型（经典模式）
+  targetPerson?: string; // 目标人群（经典模式）
+  style?: string; // 祝福语风格（可选）
   customDescription?: string; // 自定义描述（智能模式）
-  useSmartMode?: boolean;     // 是否使用智能模式
-  timestamp?: number;         // 时间戳（可选）
+  useSmartMode?: boolean; // 是否使用智能模式
+  timestamp?: number; // 时间戳（可选）
   version?: string; // 版本号（可选）
-  userProfile?: 'elderly' | 'standard' | 'young'; // 用户群配置
+  userProfile?: "elderly" | "standard" | "young"; // 用户群配置
 }
 
 /**
@@ -38,43 +39,18 @@ interface BlessingRequest {
  */
 export async function POST(req: NextRequest) {
   try {
-    // 检查是否为微信小程序访问 - 仅在生产环境中启用
-    const isDevelopment = process.env.NODE_ENV === 'development';
-    if (!isDevelopment) {
-      const userAgent = req.headers.get('user-agent') || '';
-      if (!userAgent.includes('MicroMessenger')) {
-        return NextResponse.json(
-          { error: "此应用仅支持微信小程序访问，请在微信中打开" },
-          { status: 403 }
-        );
-      }
+    // 检查是否为微信小程序访问
+    if (!isWeChatRequest(req)) {
+      return NextResponse.json(
+        { error: "此应用仅支持微信小程序访问，请在微信中打开" },
+        { status: 403 },
+      );
     }
 
-    // 从 Cookie 获取 token - 仅在生产环境中启用
-    let decoded;
-    if (!isDevelopment) {
-      const token = req.cookies.get('auth_token')?.value || req.headers.get('Authorization')?.replace('Bearer ', '');
-
-      if (!token) {
-        return NextResponse.json(
-          { error: '用户未登录' },
-          { status: 401 }
-        );
-      }
-
-      // 验证 token
-      decoded = verifyToken(token);
-
-      if (!decoded) {
-        return NextResponse.json(
-          { error: '登录已过期' },
-          { status: 401 }
-        );
-      }
-    } else {
-      // 在开发环境中，创建一个模拟的解码用户对象
-      console.log('开发模式：跳过微信验证和认证');
-      decoded = { openid: 'dev_openid_12345' }; // 模拟用户ID
+    // 解析认证信息
+    const auth = resolveAuth(req);
+    if (!auth) {
+      return NextResponse.json({ error: "用户未登录" }, { status: 401 });
     }
 
     // 解析请求体中的 JSON 数据
@@ -83,46 +59,40 @@ export async function POST(req: NextRequest) {
     // 基础验证
     const validation = validateInput(body);
     if (!validation.valid) {
-      return NextResponse.json(
-        { error: validation.error },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: validation.error }, { status: 400 });
     }
-    
+
     // 清理输入
     if (body.customDescription) {
       body.customDescription = cleanText(body.customDescription);
     }
-    
+
+    // ── 积分检查 ──
+    const creditsCheck = await checkAndDeduct(db, auth.openid, "blessing");
+    if (!creditsCheck.ok) {
+      return NextResponse.json(
+        {
+          error: "当日免费次数已用尽，积分不足",
+          code: "INSUFFICIENT_CREDITS",
+          balance: creditsCheck.balance,
+          needed: creditsCheck.needed,
+        },
+        { status: 403 },
+      );
+    }
+
     // 根据请求参数生成相应的 AI 提示词
     const prompt = createBlessingPrompt(body);
-    
+
     // 调用 AI 服务生成祝福语
     const blessing = await generateBlessing(prompt);
 
-    // 获取用户信息
-    let user = null;
-    let userError = null;
-
-    if (!isDevelopment) {
-      const result = await db.execute({
-        sql: 'SELECT id FROM users WHERE openid = ? LIMIT 1',
-        args: [decoded.openid],
-      });
-      user = result.rows[0] ?? null;
-      userError = user ? null : 'not found';
-    } else {
-      // 在开发模式下，模拟一个用户对象而不依赖数据库
-      user = { id: 'dev_user_12345' };
-      userError = null;
-      console.log('开发模式：使用模拟用户数据');
-    }
-
-    if (userError || !user) {
-      // 如果用户不存在，但生成祝福语成功，仍返回祝福语，但不插入历史记录
-      console.warn('用户不存在，无法插入历史记录:', userError);
-      return NextResponse.json({ blessing });
-    }
+    // 获取用户信息（查找数据库中的 user id 用于记录历史）
+    const userResult = await db.execute({
+      sql: "SELECT id FROM users WHERE openid = ? LIMIT 1",
+      args: [auth.openid],
+    });
+    const user = userResult.rows[0] ?? null;
 
     // 插入历史记录
     try {
@@ -131,11 +101,11 @@ export async function POST(req: NextRequest) {
         blessing,
         occasion: body.occasion,
         target_person: body.targetPerson,
-        style: body.style || '传统',
+        style: body.style || "传统",
       });
     } catch (historyError) {
       // 历史记录插入失败，但不影响祝福语生成
-      console.error('插入历史记录失败:', historyError);
+      console.error("插入历史记录失败:", historyError);
     }
 
     // 返回成功结果
@@ -146,15 +116,18 @@ export async function POST(req: NextRequest) {
 
     // 安全的错误处理 - 只返回用户友好的消息
     let errorMessage = "生成失败，请重试";
-    
+
     // 处理特定的已知错误类型
     if (axios.isAxiosError(error)) {
       if (error.response?.status === 429) {
         errorMessage = "请求太频繁，请稍后再试";
-      } else if (error.response?.status === 401 || error.response?.status === 403) {
+      } else if (
+        error.response?.status === 401 ||
+        error.response?.status === 403
+      ) {
         errorMessage = "服务暂时不可用";
       }
-    } else if (error instanceof Error && error.message.includes('429')) {
+    } else if (error instanceof Error && error.message.includes("429")) {
       errorMessage = "请求太频繁，请稍后再试";
     }
 
