@@ -59,6 +59,7 @@ async function ensureTables(db: Client): Promise<void> {
         updated_at TEXT NOT NULL
       )
     `);
+
     await db.execute(`
       CREATE TABLE IF NOT EXISTS credits_transactions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
