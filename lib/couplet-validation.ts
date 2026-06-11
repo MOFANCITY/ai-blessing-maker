@@ -13,7 +13,7 @@ export type CoupletTheme = (typeof COUPLET_THEMES)[number];
 export interface CoupletUpperRequest {
   occasion?: string;
   theme?: string;
-  difficulty?: 'simple' | 'medium' | 'hard';
+  difficulty?: "simple" | "medium" | "hard";
 }
 
 export interface CoupletReviewRequest {
@@ -46,9 +46,12 @@ export function normalizeCoupletLine(text: string): string {
     .trim();
 }
 
-export function validateCoupletUpperRequest(
-  data: unknown
-): { valid: boolean; error?: string; theme?: string; difficulty?: 'simple' | 'medium' | 'hard' } {
+export function validateCoupletUpperRequest(data: unknown): {
+  valid: boolean;
+  error?: string;
+  theme?: string;
+  difficulty?: "simple" | "medium" | "hard";
+} {
   if (!data || typeof data !== "object") {
     return { valid: false, error: "请求参数无效" };
   }
@@ -59,9 +62,11 @@ export function validateCoupletUpperRequest(
     ? rawTheme
     : "日常";
 
-  const difficulty = ['simple', 'medium', 'hard'].includes(input.difficulty || '') 
-    ? (input.difficulty as 'simple' | 'medium' | 'hard')
-    : 'medium';
+  const difficulty = ["simple", "medium", "hard"].includes(
+    input.difficulty || "",
+  )
+    ? (input.difficulty as "simple" | "medium" | "hard")
+    : "medium";
 
   if (hasBlockedContent(rawTheme)) {
     return { valid: false, error: "主题内容不符合要求" };
@@ -70,9 +75,13 @@ export function validateCoupletUpperRequest(
   return { valid: true, theme, difficulty };
 }
 
-export function validateCoupletReviewRequest(
-  data: unknown
-): { valid: boolean; error?: string; upperLine?: string; lowerLine?: string; recordId?: number } {
+export function validateCoupletReviewRequest(data: unknown): {
+  valid: boolean;
+  error?: string;
+  upperLine?: string;
+  lowerLine?: string;
+  recordId?: number;
+} {
   if (!data || typeof data !== "object") {
     return { valid: false, error: "请求参数无效" };
   }
@@ -80,7 +89,8 @@ export function validateCoupletReviewRequest(
   const input = data as CoupletReviewRequest;
   const upperLine = normalizeCoupletLine(String(input.upperLine || ""));
   const lowerLine = normalizeCoupletLine(String(input.lowerLine || ""));
-  const recordId = typeof input.recordId === 'number' ? input.recordId : undefined;
+  const recordId =
+    typeof input.recordId === "number" ? input.recordId : undefined;
 
   if (!upperLine || !lowerLine) {
     return { valid: false, error: "请填写完整的上联和下联" };
@@ -120,15 +130,15 @@ export function normalizeUpperLineFromAI(raw: string): string {
   return normalizeCoupletLine(
     line
       .replace(/^(上联|上聯|横批|橫批|下联|下聯)[：:]\s*/i, "")
-      .replace(/^["「『]|["」』]$/g, "")
+      .replace(/^["「『]|["」』]$/g, ""),
   );
 }
 
 export const COUPLET_REVIEW_FALLBACK: CoupletReviewResult = {
   score: 4,
-  summary: "写得不错，可以分享给亲友看看",
-  strengths: ["心意真挚"],
-  suggestions: [],
+  summary: "差强人意，但可以分享给朋友看看",
+  strengths: ["有点儿意思"],
+  suggestions: ["尝试先从平仄押韵开始"],
   canShare: true,
 };
 
@@ -149,18 +159,21 @@ export function parseCoupletReviewJson(raw: string): CoupletReviewResult {
 
     const strengths = Array.isArray(parsed.strengths)
       ? parsed.strengths
-          .filter((s): s is string => typeof s === "string" && s.trim().length > 0)
+          .filter(
+            (s): s is string => typeof s === "string" && s.trim().length > 0,
+          )
           .slice(0, 2)
       : COUPLET_REVIEW_FALLBACK.strengths;
 
     const suggestions = Array.isArray(parsed.suggestions)
       ? parsed.suggestions
-          .filter((s): s is string => typeof s === "string" && s.trim().length > 0)
+          .filter(
+            (s): s is string => typeof s === "string" && s.trim().length > 0,
+          )
           .slice(0, 2)
       : [];
 
-    const canShare =
-      parsed.canShare === false ? false : true;
+    const canShare = parsed.canShare === false ? false : true;
 
     return { score, summary, strengths, suggestions, canShare };
   } catch {
