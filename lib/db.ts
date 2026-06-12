@@ -115,6 +115,36 @@ export const userDb = {
   },
 };
 
+let historyTableReady: Promise<void> | null = null;
+
+function ensureHistoryTable() {
+  if (historyTableReady) return historyTableReady;
+  historyTableReady = db
+    .execute(
+      `CREATE TABLE IF NOT EXISTS user_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT,
+        blessing TEXT NOT NULL,
+        occasion TEXT,
+        target_person TEXT,
+        style TEXT DEFAULT '传统',
+        created_at INTEGER NOT NULL DEFAULT (strftime('%s','now') * 1000)
+      )`,
+    )
+    .then(() =>
+      db.execute(
+        `CREATE INDEX IF NOT EXISTS idx_user_history_user_id_created
+         ON user_history (user_id, created_at DESC)`,
+      ),
+    )
+    .then(() => undefined)
+    .catch((err) => {
+      historyTableReady = null;
+      throw err;
+    });
+  return historyTableReady;
+}
+
 export const historyDb = {
   async getUserHistory(userId: string, page = 1, pageSize = 10) {
     const offset = (page - 1) * pageSize;
@@ -138,6 +168,7 @@ export const historyDb = {
     target_person?: string;
     style?: string;
   }) {
+    await ensureHistoryTable();
     const result = await db.execute({
       sql: "INSERT INTO user_history (user_id, blessing, occasion, target_person, style) VALUES (?, ?, ?, ?, ?) RETURNING *",
       args: [
