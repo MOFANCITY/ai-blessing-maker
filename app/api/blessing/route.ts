@@ -95,21 +95,23 @@ export async function POST(req: NextRequest) {
     const user = userResult.rows[0] ?? null;
 
     // 插入历史记录
+    let recordId: number | null = null;
     try {
-      await historyDb.addHistory({
+      const record = await historyDb.addHistory({
         user_id: user.id,
         blessing,
         occasion: body.occasion,
         target_person: body.targetPerson,
         style: body.style || "传统",
       });
+      recordId = (record as { id: number } | undefined)?.id ?? null;
     } catch (historyError) {
       // 历史记录插入失败，但不影响祝福语生成
       console.error("插入历史记录失败:", historyError);
     }
 
     // 返回成功结果
-    return NextResponse.json({ blessing });
+    return NextResponse.json({ blessing, recordId });
   } catch (error) {
     // 记录错误信息用于调试
     console.error("生成祝福语失败:", error);

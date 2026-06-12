@@ -787,3 +787,64 @@ export const favoriteDb = {
     return result.rows.length > 0;
   },
 };
+
+let feedbackTableReady: Promise<void> | null = null;
+
+function ensureFeedbackTable() {
+  if (feedbackTableReady) return feedbackTableReady;
+  feedbackTableReady = db
+    .execute(
+      `CREATE TABLE IF NOT EXISTS feedback (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL,
+        content_type TEXT NOT NULL,
+        record_id INTEGER,
+        feedback_type TEXT NOT NULL DEFAULT 'dislike',
+        created_at INTEGER NOT NULL,
+        UNIQUE(user_id, content_type, record_id)
+      )`,
+    )
+    .then(() =>
+      db.execute(
+        `CREATE INDEX IF NOT EXISTS idx_feedback_user_content
+         ON feedback (user_id, content_type, created_at DESC)`,
+      ),
+    )
+    .then(() => undefined)
+    .catch((err) => {
+      feedbackTableReady = null;
+      throw err;
+    });
+  return feedbackTableReady;
+}
+
+export const feedbackDb = {
+  async addFeedback(data: {
+    user_id: string;
+    content_type: string;
+    record_id: number;
+  }) {
+    await ensureFeedbackTable();
+    const result = await db.execute({
+      sql: `INSERT INTO feedback (user_id, content_type, record_id, feedback_type, created_at)
+            VALUES (?, ?, ?, 'dislike', ?) RETURNING *`,
+      args: [data.user_id, data.content_type, data.record_id, Date.now()],
+    });
+    return result.rows[0] ?? null;
+  },
+
+  async removeFeedback(data: {
+    user_id: string;
+    content_type: string;
+    record_id: number;
+  }) {
+    await ensureFeedbackTable();
+    const result = await db.execute({
+      sql: `DELETE FROM feedback
+            WHERE user_id = ? AND content_type = ? AND record_id = ?
+            RETURNING *`,
+      args: [data.user_id, data.content_type, data.record_id],
+    });
+    return result.rows[0] ?? null;
+  },
+};
