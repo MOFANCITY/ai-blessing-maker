@@ -1,57 +1,37 @@
 import { NextRequest, NextResponse } from "next/server";
-import axios from "axios";
 import { poemDb } from "@/lib/db";
+import { isWeChatRequest, resolveAuth } from "@/lib/api-auth";
 
 interface CompletePoemRequest {
-  type?: unknown;
-  theme?: unknown;
-  aiLines?: unknown;
+  recordId?: unknown;
   userLines?: unknown;
 }
 
-function resolveAuth(req: NextRequest): { openid: string } | null {
-  const isDevelopment = process.env.NODE_ENV === "development";
-  if (isDevelopment) {
-    return { openid: "dev_openid_12345" };
-  }
+function parseUserLines(value: unknown, expectedLength: number): string[] | null {
+  if (!Array.isArray(value) || value.length !== 2) return null;
 
-  const userAgent = req.headers.get("user-agent") || "";
-  if (!userAgent.includes("MicroMessenger")) {
+  const lines = value.map((line) => (typeof line === "string" ? line.trim() : ""));
+  if (
+    lines.some((line) => {
+      const characters = Array.from(line);
+      return (
+        characters.length !== expectedLength ||
+        characters.some((character) => !/[\u4e00-\u9fff]/.test(character))
+      );
+    })
+  ) {
     return null;
   }
-
-  const token =
-    req.cookies.get("auth_token")?.value ||
-    req.headers.get("Authorization")?.replace("Bearer ", "");
-
-  if (!token) return null;
-
-  try {
-    const parts = token.split(".");
-    if (parts.length !== 3) return null;
-    const payload = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-    const padded = payload + "=".repeat((4 - (payload.length % 4)) % 4);
-    const decoded = JSON.parse(Buffer.from(padded, "base64").toString());
-    if (typeof decoded.openid === "string" && decoded.openid.length > 0) {
-      return { openid: decoded.openid };
-    }
-  } catch {
-    return null;
-  }
-  return null;
+  return lines;
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const isDevelopment = process.env.NODE_ENV === "development";
-    if (!isDevelopment) {
-      const userAgent = req.headers.get("user-agent") || "";
-      if (!userAgent.includes("MicroMessenger")) {
-        return NextResponse.json(
-          { error: "此应用仅支持微信小程序访问，请在微信中打开" },
-          { status: 403 },
-        );
-      }
+    if (!isWeChatRequest(req)) {
+      return NextResponse.json(
+        { error: "此应用仅支持微信小程序访问，请在微信中打开" },
+        { status: 403 },
+      );
     }
 
     const auth = resolveAuth(req);
@@ -60,83 +40,60 @@ export async function POST(req: NextRequest) {
     }
 
     const body = (await req.json()) as CompletePoemRequest;
-
-    const type = body.type;
-    if (type !== "poem5" && type !== "poem7") {
-      return NextResponse.json({ error: "古诗类型不正确" }, { status: 400 });
+    const recordId =
+      typeof body.recordId === "number" &&
+      Number.isSafeInteger(body.recordId) &&
+      body.recordId > 0
+        ? body.recordId
+        : null;
+    if (!recordId) {
+      return NextResponse.json({ error: "古诗记录不存在" }, { status: 400 });
     }
 
-    const theme = typeof body.theme === "string" ? body.theme.trim() : "";
-    if (!theme) {
-      return NextResponse.json({ error: "古诗主题不能为空" }, { status: 400 });
+    // The authoritative type/theme/AI lines live in the draft. Clients only
+    // submit their own two lines, so forged AI content cannot be persisted.
+    const draft = await poemDb.getPoemRecord(recordId, auth.openid);
+    if (!draft) {
+      return NextResponse.json({ error: "古诗记录不存在或已完成" }, { status: 404 });
     }
 
-    if (!Array.isArray(body.aiLines) || body.aiLines.length < 2) {
+    const type = draft.type === "poem7" ? "poem7" : "poem5";
+    const userLines = parseUserLines(body.userLines, type === "poem7" ? 7 : 5);
+    if (!userLines) {
       return NextResponse.json(
-        { error: "AI 创作的诗句不完整" },
+        { error: `请填写两句各${type === "poem7" ? 7 : 5}个汉字的续写` },
         { status: 400 },
       );
     }
 
-    if (!Array.isArray(body.userLines) || body.userLines.length < 2) {
-      return NextResponse.json(
-        { error: "您续写的诗句不完整" },
-        { status: 400 },
-      );
+    const aiLines = String(draft.ai_lines)
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+    if (aiLines.length !== 2) {
+      return NextResponse.json({ error: "古诗草稿数据异常，请重新生成" }, { status: 409 });
     }
 
-    const aiLines = [body.aiLines[0], body.aiLines[1]]
-      .filter(Boolean)
-      .join("\n");
-    const userLines = [body.userLines[0], body.userLines[1]]
-      .filter(Boolean)
-      .join("\n");
-    const result = [
-      body.aiLines[0],
-      body.aiLines[1],
-      body.userLines[0],
-      body.userLines[1],
-    ]
-      .filter(Boolean)
-      .join("\n");
-
-    try {
-      await poemDb.insertPoemRecord({
-        user_id: auth.openid,
-        type,
-        theme,
-        gameMode: true,
-        extras: null,
-        aiLines,
-        userLines,
-        result,
-      });
-    } catch (dbError) {
-      console.error("插入古诗完成记录失败:", dbError);
+    const result = [...aiLines, ...userLines].join("\n");
+    const record = await poemDb.updatePoemUserLines(
+      recordId,
+      auth.openid,
+      userLines,
+      result,
+    );
+    if (!record) {
+      return NextResponse.json({ error: "古诗记录不存在或已完成" }, { status: 409 });
     }
 
     return NextResponse.json({
       success: true,
+      recordId,
       type,
-      theme,
+      theme: String(draft.theme),
+      lines: [...aiLines, ...userLines],
     });
   } catch (error) {
     console.error("提交古诗合作失败:", error);
-
-    let errorMessage = "提交失败，请重试";
-    if (axios.isAxiosError(error)) {
-      if (error.response?.status === 429) {
-        errorMessage = "请求太频繁，请稍后再试";
-      } else if (
-        error.response?.status === 401 ||
-        error.response?.status === 403
-      ) {
-        errorMessage = "服务暂时不可用";
-      }
-    } else if (error instanceof Error && error.message.includes("429")) {
-      errorMessage = "请求太频繁，请稍后再试";
-    }
-
-    return NextResponse.json({ error: errorMessage }, { status: 500 });
+    return NextResponse.json({ error: "提交失败，请重试" }, { status: 500 });
   }
 }

@@ -1,4 +1,6 @@
 // 简化的验证规则
+import { containsPromptInjectionAttempt } from "@/lib/prompt-safety";
+
 const LIMITS = {
   customDescription: { min: 5, max: 300 },
   additionalInfo: { max: 100 },
@@ -18,12 +20,38 @@ export interface DissCleanedInput {
 
 // 基础危险词过滤（只过滤明显的提示词注入）
 const BLOCKED_PATTERNS = [
-  /ignore.{0,10}(previous|above|instruction)/i,
-  /forget.{0,10}(everything|above|instruction)/i,
-  /(system|assistant|user):/i,
   /<script/i,
-  /javascript:/i
+  /javascript:/i,
+  /\b(system|assistant|user)\s*:/i,
 ];
+
+function hasUnsafePromptContent(text: string): boolean {
+  return containsPromptInjectionAttempt(text) || BLOCKED_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+const CLASSIC_FIELD_LIMITS = {
+  occasion: 40,
+  targetPerson: 40,
+  style: 24,
+  festival: 40,
+} as const;
+
+function validateRequiredClassicText(value: unknown, field: keyof typeof CLASSIC_FIELD_LIMITS): boolean {
+  return typeof value === "string"
+    && cleanText(value).length > 0
+    && cleanText(value).length <= CLASSIC_FIELD_LIMITS[field]
+    && !hasUnsafePromptContent(cleanText(value));
+}
+
+function validateOptionalClassicText(value: unknown, field: keyof typeof CLASSIC_FIELD_LIMITS): boolean {
+  if (value === undefined || value === null) return true;
+  if (typeof value !== "string") return false;
+  const cleaned = cleanText(value);
+  return cleaned.length === 0 || (
+    cleaned.length <= CLASSIC_FIELD_LIMITS[field]
+    && !hasUnsafePromptContent(cleaned)
+  );
+}
 
 export function validateInput(data: unknown): { valid: boolean; error?: string } {
   // 空值检查
@@ -36,7 +64,9 @@ export function validateInput(data: unknown): { valid: boolean; error?: string }
   
   // 智能模式验证
   if (inputData.useSmartMode || inputData.mode === 'smart') {
-    const desc = (inputData.customDescription as string)?.trim();
+    const desc = typeof inputData.customDescription === "string"
+      ? cleanText(inputData.customDescription)
+      : "";
     
     if (!desc) return { valid: false, error: "请输入场景描述" };
     if (desc.length < LIMITS.customDescription.min) {
@@ -47,15 +77,20 @@ export function validateInput(data: unknown): { valid: boolean; error?: string }
     }
     
     // 检查危险模式
-    if (BLOCKED_PATTERNS.some(pattern => pattern.test(desc))) {
+    if (hasUnsafePromptContent(desc)) {
       return { valid: false, error: "输入内容不符合要求" };
     }
   }
   
   // 经典模式验证（简单非空检查）
   else {
-    if (!inputData.occasion || !inputData.targetPerson) {
-      return { valid: false, error: "请选择场合和对象" };
+    if (
+      !validateRequiredClassicText(inputData.occasion, "occasion")
+      || !validateRequiredClassicText(inputData.targetPerson, "targetPerson")
+      || !validateOptionalClassicText(inputData.style, "style")
+      || !validateOptionalClassicText(inputData.festival, "festival")
+    ) {
+      return { valid: false, error: "请选择有效且安全的场合和对象" };
     }
   }
   
@@ -64,7 +99,7 @@ export function validateInput(data: unknown): { valid: boolean; error?: string }
 
 // 简单文本清理（移除控制字符）
 export function cleanText(text: string): string {
-  return text.replace(/[\x00-\x1F\x7F]/g, '').trim();
+  return text.replace(/[\x00-\x1F\x7F\u200B-\u200D\uFEFF]/g, '').trim();
 }
 
 /**
@@ -81,7 +116,7 @@ export function validateDissInput(data: unknown): { valid: boolean; error?: stri
 
   const input = data as { situation?: unknown; tone?: unknown; target?: unknown; presetId?: unknown };
 
-  const rawSituation = typeof input.situation === 'string' ? input.situation.trim() : '';
+  const rawSituation = typeof input.situation === 'string' ? cleanText(input.situation) : '';
   if (!rawSituation) {
     return { valid: false, error: '请输入对方原话' };
   }
@@ -92,7 +127,7 @@ export function validateDissInput(data: unknown): { valid: boolean; error?: stri
     return { valid: false, error: '描述太长，请简化一下' };
   }
 
-  if (BLOCKED_PATTERNS.some((pattern) => pattern.test(rawSituation))) {
+  if (hasUnsafePromptContent(rawSituation)) {
     return { valid: false, error: '输入内容不符合要求' };
   }
 
@@ -106,9 +141,12 @@ export function validateDissInput(data: unknown): { valid: boolean; error?: stri
     if (typeof input.target !== 'string') {
       return { valid: false, error: '称呼格式不正确' };
     }
-    target = input.target.trim();
+    target = cleanText(input.target);
     if (target.length > LIMITS.dissTarget.max) {
       return { valid: false, error: '称呼不能超过 50 字' };
+    }
+    if (hasUnsafePromptContent(target)) {
+      return { valid: false, error: '称呼内容不符合要求' };
     }
     if (target.length === 0) target = undefined;
   }
@@ -203,9 +241,12 @@ export function validatePoemInput(
     if (typeof input.extras !== 'string') {
       return { valid: false, error: '额外要求格式不正确' };
     }
-    const trimmed = input.extras.trim();
+    const trimmed = cleanText(input.extras);
     if (trimmed.length > LIMITS_POEM.extras.max) {
       return { valid: false, error: '额外要求不能超过 200 字' };
+    }
+    if (hasUnsafePromptContent(trimmed)) {
+      return { valid: false, error: '额外要求包含不允许的指令性内容' };
     }
     extras = trimmed || undefined;
   }

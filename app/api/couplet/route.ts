@@ -7,25 +7,25 @@ import {
   validateCoupletUpperRequest,
 } from "@/lib/couplet-validation";
 import { resolveCoupletAuth } from "@/lib/couplet-api-auth";
-import { db, coupletDb, userStatsDb } from "@/lib/db";
-import { checkAndDeduct } from "@/lib/credits";
+import { db, coupletDb } from "@/lib/db";
+import { checkAndDeduct, refundUsage } from "@/lib/credits";
 
 export async function POST(req: NextRequest) {
-  try {
-    const userAgent = req.headers.get("user-agent") || "";
-    if (!userAgent.includes("MicroMessenger")) {
-      return NextResponse.json(
-        { error: "此应用仅支持微信小程序访问，请在微信中打开" },
-        { status: 403 },
-      );
-    }
+  let chargedOpenid: string | null = null;
 
+  try {
     const auth = resolveCoupletAuth(req);
     if (!auth) {
       return NextResponse.json({ error: "用户未登录" }, { status: 401 });
     }
 
-    // ── 积分检查 ──
+    const body = await req.json();
+    const validation = validateCoupletUpperRequest(body);
+    if (!validation.valid) {
+      return NextResponse.json({ error: validation.error }, { status: 400 });
+    }
+
+    // Validate before charging. This keeps malformed requests free.
     const creditsCheck = await checkAndDeduct(db, auth.openid, "couplet");
     if (!creditsCheck.ok) {
       return NextResponse.json(
@@ -38,12 +38,7 @@ export async function POST(req: NextRequest) {
         { status: 403 },
       );
     }
-
-    const body = await req.json();
-    const validation = validateCoupletUpperRequest(body);
-    if (!validation.valid) {
-      return NextResponse.json({ error: validation.error }, { status: 400 });
-    }
+    chargedOpenid = auth.openid;
 
     const prompt = createCoupletUpperPrompt(
       validation.theme!,
@@ -53,6 +48,12 @@ export async function POST(req: NextRequest) {
     const upperLine = normalizeUpperLineFromAI(raw);
 
     if (!upperLine || [...upperLine].length < 4) {
+      try {
+        await refundUsage(db, auth.openid, "couplet");
+      } catch (refundError) {
+        console.error("对联格式失败退款失败:", refundError);
+      }
+      chargedOpenid = null;
       return NextResponse.json(
         { error: "生成上联失败，请重试" },
         { status: 500 },
@@ -71,11 +72,19 @@ export async function POST(req: NextRequest) {
         | undefined,
     });
 
+    chargedOpenid = null;
     return NextResponse.json({
       upperLine,
       recordId: record.id,
     });
   } catch (error) {
+    if (chargedOpenid) {
+      try {
+        await refundUsage(db, chargedOpenid, "couplet");
+      } catch (refundError) {
+        console.error("对联生成退款失败:", refundError);
+      }
+    }
     console.error("生成上联失败:", error);
 
     let errorMessage = "生成失败，请重试";

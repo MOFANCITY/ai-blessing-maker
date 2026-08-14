@@ -1,17 +1,9 @@
 /**
- * 积分（Credits）业务逻辑层
+ * 积分（Credits）业务逻辑层。
  *
- * 职责：组合数据库操作，实现完整的积分业务规则。
- * 设计原则：
- *   - 接收 db client 作为参数（依赖注入），不直接引用全局 db
- *   - 不处理 HTTP 请求/响应，保持纯业务逻辑
- *   - 每个方法职责单一，便于单元测试
- *
- * 测试策略：
- *   - 传入 mock db client 即可测试各业务规则
- *   - 无需模拟 HTTP 层
+ * 每一笔余额变更及其流水都通过 libSQL 的 write batch 在同一事务中提交，
+ * 避免并发请求透支余额或留下没有流水的余额变更。
  */
-
 import type { Client } from "@libsql/client/http";
 import {
   COST_PER_USAGE,
@@ -30,23 +22,16 @@ import type {
   CreditsReason,
 } from "./types";
 
-// ============================================================
-// 内部工具
-// ============================================================
-
 const todayStr = (): string => new Date().toISOString().slice(0, 10);
 const nowISO = (): string => new Date().toISOString();
 const nowTs = (): number => Date.now();
 
-// ============================================================
-// 数据库层
-// ============================================================
+let tablesReady: Promise<void> | null = null;
 
-let _tablesReady: Promise<void> | null = null;
+export async function ensureCreditsTables(db: Client): Promise<void> {
+  if (tablesReady) return tablesReady;
 
-async function ensureTables(db: Client): Promise<void> {
-  if (_tablesReady) return _tablesReady;
-  _tablesReady = (async () => {
+  tablesReady = (async () => {
     await db.execute(`
       CREATE TABLE IF NOT EXISTS user_credits (
         openid TEXT PRIMARY KEY,
@@ -59,7 +44,6 @@ async function ensureTables(db: Client): Promise<void> {
         updated_at TEXT NOT NULL
       )
     `);
-
     await db.execute(`
       CREATE TABLE IF NOT EXISTS credits_transactions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -76,46 +60,41 @@ async function ensureTables(db: Client): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_ct_openid_created
         ON credits_transactions (openid, created_at DESC)
     `);
-  })();
-  return _tablesReady;
+  })().catch((error) => {
+    tablesReady = null;
+    throw error;
+  });
+
+  return tablesReady;
 }
 
-async function insertTransaction(
-  db: Client,
-  tx: {
-    openid: string;
-    type: "earn" | "spend";
-    amount: number;
-    balanceAfter: number;
-    reason: CreditsReason;
-    metadata?: Record<string, unknown>;
-  },
-): Promise<void> {
-  await db.execute({
+function transactionStatement(input: {
+  openid: string;
+  type: "earn" | "spend";
+  amount: number;
+  reason: CreditsReason;
+  metadata?: Record<string, unknown>;
+}) {
+  return {
     sql: `INSERT INTO credits_transactions
           (openid, type, amount, balance_after, reason, metadata, created_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          SELECT ?, ?, ?, balance, ?, ?, ?
+          FROM user_credits
+          WHERE openid = ? AND changes() = 1`,
     args: [
-      tx.openid,
-      tx.type,
-      tx.amount,
-      tx.balanceAfter,
-      tx.reason,
-      tx.metadata ? JSON.stringify(tx.metadata) : null,
+      input.openid,
+      input.type,
+      input.amount,
+      input.reason,
+      input.metadata ? JSON.stringify(input.metadata) : null,
       nowTs(),
+      input.openid,
     ],
-  });
+  };
 }
 
-// ============================================================
-// 查询接口
-// ============================================================
-
-/**
- * 将原始数据库行转为 CreditsInfo 对象
- */
 function toCreditsInfo(row: UserCreditsRow | null): CreditsInfo {
-  const td = todayStr();
+  const today = todayStr();
   if (!row) {
     return {
       balance: 0,
@@ -127,20 +106,18 @@ function toCreditsInfo(row: UserCreditsRow | null): CreditsInfo {
       totalSpent: 0,
     };
   }
+
   return {
     balance: Number(row.balance),
     lastCheckinDate: row.last_checkin_date ?? null,
-    canCheckinToday: row.last_checkin_date !== td,
+    canCheckinToday: row.last_checkin_date !== today,
     lastDailyOpenDate: row.last_open_date ?? null,
-    canClaimDailyOpen: row.last_open_date !== td,
+    canClaimDailyOpen: row.last_open_date !== today,
     totalEarned: Number(row.total_earned),
     totalSpent: Number(row.total_spent),
   };
 }
 
-/**
- * 将数据库行转为 API 返回格式
- */
 function toTransactionItem(row: CreditsTransactionRow): TransactionItem {
   return {
     id: Number(row.id),
@@ -152,236 +129,216 @@ function toTransactionItem(row: CreditsTransactionRow): TransactionItem {
   };
 }
 
-// ============================================================
-// 公开业务接口
-// ============================================================
+/** Initialize an account and grant the one-time new-user reward atomically. */
+export async function initNewUser(db: Client, openid: string): Promise<boolean> {
+  await ensureCreditsTables(db);
+  const now = nowISO();
+  const results = await db.batch(
+    [
+      {
+        sql: `INSERT OR IGNORE INTO user_credits
+              (openid, balance, total_earned, total_spent, created_at, updated_at)
+              VALUES (?, ?, ?, 0, ?, ?)
+              RETURNING balance`,
+        args: [openid, NEW_USER_BONUS, NEW_USER_BONUS, now, now],
+      },
+      transactionStatement({
+        openid,
+        type: "earn",
+        amount: NEW_USER_BONUS,
+        reason: "new_user",
+      }),
+    ],
+    "write",
+  );
 
-/**
- * 初始化新用户的积分记录（幂等）
- * @returns true 表示首次初始化（新用户），false 表示已存在
- */
-export async function initNewUser(
-  db: Client,
-  openid: string,
-): Promise<boolean> {
-  await ensureTables(db);
-  const iso = nowISO();
-  const result = await db.execute({
-    sql: `INSERT INTO user_credits (openid, balance, total_earned, total_spent, created_at, updated_at)
-          VALUES (?, 0, 0, 0, ?, ?)`,
-    args: [openid, iso, iso],
-  });
-  if (result.rowsAffected === 0) return false;
-  // 赠送新用户积分
-  await addCredits(db, openid, NEW_USER_BONUS, "new_user");
-  return true;
+  return results[0].rows.length > 0;
 }
 
-/**
- * 获取用户积分概览
- */
 export async function getCreditsInfo(
   db: Client,
   openid: string,
 ): Promise<CreditsInfo> {
-  await ensureTables(db);
-  const row = await db.execute({
+  await ensureCreditsTables(db);
+  const result = await db.execute({
     sql: "SELECT * FROM user_credits WHERE openid = ? LIMIT 1",
     args: [openid],
   });
   return toCreditsInfo(
-    row.rows[0] ? (row.rows[0] as unknown as UserCreditsRow) : null,
+    result.rows[0]
+      ? (result.rows[0] as unknown as UserCreditsRow)
+      : null,
   );
 }
 
 /**
- * 检查并扣除积分（每次 AI 调用前执行）
- *
- * 规则：
- *   1. 直接检查余额是否足够
- *   2. 余额不足时返回失败
+ * Atomically debit one AI use and append its ledger entry. The conditional
+ * UPDATE makes the balance check safe even when multiple requests race.
  */
 export async function checkAndDeduct(
   db: Client,
   openid: string,
   feature?: string,
 ): Promise<CreditsCheckResult> {
-  await ensureTables(db);
+  await ensureCreditsTables(db);
+  const now = nowISO();
+  const results = await db.batch(
+    [
+      {
+        sql: `UPDATE user_credits
+              SET balance = balance - ?, total_spent = total_spent + ?, updated_at = ?
+              WHERE openid = ? AND balance >= ?
+              RETURNING balance`,
+        args: [COST_PER_USAGE, COST_PER_USAGE, now, openid, COST_PER_USAGE],
+      },
+      transactionStatement({
+        openid,
+        type: "spend",
+        amount: COST_PER_USAGE,
+        reason: "ai_usage",
+        metadata: feature ? { feature } : undefined,
+      }),
+    ],
+    "write",
+  );
 
-  const row = await db.execute({
-    sql: "SELECT * FROM user_credits WHERE openid = ? LIMIT 1",
+  const updated = results[0].rows[0] as { balance?: number } | undefined;
+  if (updated) return { ok: true, balanceAfter: Number(updated.balance) };
+
+  const balanceResult = await db.execute({
+    sql: "SELECT balance FROM user_credits WHERE openid = ? LIMIT 1",
     args: [openid],
   });
-
-  if (!row.rows[0]) {
-    return {
-      ok: false,
-      code: "INSUFFICIENT_CREDITS",
-      balance: 0,
-      needed: COST_PER_USAGE,
-    };
-  }
-
-  const r = row.rows[0] as unknown as UserCreditsRow;
-  const balance = Number(r.balance);
-
-  if (balance < COST_PER_USAGE) {
-    return {
-      ok: false,
-      code: "INSUFFICIENT_CREDITS",
-      balance,
-      needed: COST_PER_USAGE - balance,
-    };
-  }
-
-  // 扣减积分
-  const newBalance = balance - COST_PER_USAGE;
-  await db.execute({
-    sql: `UPDATE user_credits
-          SET balance = ?, total_spent = total_spent + ?, updated_at = ?
-          WHERE openid = ?`,
-    args: [newBalance, COST_PER_USAGE, nowISO(), openid],
-  });
-  await insertTransaction(db, {
-    openid,
-    type: "spend",
-    amount: COST_PER_USAGE,
-    balanceAfter: newBalance,
-    reason: "ai_usage",
-    metadata: feature ? { feature } : undefined,
-  });
-
-  return { ok: true, balanceAfter: newBalance };
+  const balance = Number(
+    (balanceResult.rows[0] as { balance?: number } | undefined)?.balance ?? 0,
+  );
+  return {
+    ok: false,
+    code: "INSUFFICIENT_CREDITS",
+    balance,
+    needed: Math.max(0, COST_PER_USAGE - balance),
+  };
 }
 
-/**
- * 为用户增加积分
- */
+/** Atomically add credits and create the matching earning ledger entry. */
 export async function addCredits(
   db: Client,
   openid: string,
   amount: number,
   reason: CreditsReason,
   metadata?: Record<string, unknown>,
-): Promise<number /* new balance */> {
-  await ensureTables(db);
-
-  const row = await db.execute({
-    sql: "SELECT balance FROM user_credits WHERE openid = ? LIMIT 1",
-    args: [openid],
-  });
-
-  if (!row.rows[0]) {
-    const iso = nowISO();
-    await db.execute({
-      sql: `INSERT INTO user_credits (openid, balance, total_earned, total_spent, created_at, updated_at)
-            VALUES (?, 0, 0, 0, ?, ?)`,
-      args: [openid, iso, iso],
-    });
+): Promise<number> {
+  if (!Number.isInteger(amount) || amount <= 0) {
+    throw new Error("积分数量必须为正整数");
   }
 
-  const currentBalance = row.rows[0]
-    ? Number((row.rows[0] as unknown as { balance: number }).balance)
-    : 0;
-  const newBalance = currentBalance + amount;
+  await ensureCreditsTables(db);
+  const now = nowISO();
+  const results = await db.batch(
+    [
+      {
+        sql: `INSERT OR IGNORE INTO user_credits
+              (openid, balance, total_earned, total_spent, created_at, updated_at)
+              VALUES (?, 0, 0, 0, ?, ?)`,
+        args: [openid, now, now],
+      },
+      {
+        sql: `UPDATE user_credits
+              SET balance = balance + ?, total_earned = total_earned + ?, updated_at = ?
+              WHERE openid = ?
+              RETURNING balance`,
+        args: [amount, amount, now, openid],
+      },
+      transactionStatement({ openid, type: "earn", amount, reason, metadata }),
+    ],
+    "write",
+  );
 
-  await db.execute({
-    sql: `UPDATE user_credits
-          SET balance = ?, total_earned = total_earned + ?, updated_at = ?
-          WHERE openid = ?`,
-    args: [newBalance, amount, nowISO(), openid],
-  });
-  await insertTransaction(db, {
-    openid,
-    type: "earn",
-    amount,
-    balanceAfter: newBalance,
-    reason,
-    metadata,
-  });
-
-  return newBalance;
+  return Number((results[1].rows[0] as unknown as { balance: number }).balance);
 }
 
-/**
- * 每日签到
- */
+/** Refund a previously charged AI request when an upstream operation fails. */
+export async function refundUsage(
+  db: Client,
+  openid: string,
+  feature?: string,
+): Promise<number> {
+  return addCredits(db, openid, COST_PER_USAGE, "ai_refund", feature ? { feature } : undefined);
+}
+
+async function rewardOnce(
+  db: Client,
+  openid: string,
+  amount: number,
+  reason: CreditsReason,
+  dateColumn: "last_checkin_date" | "last_open_date",
+) {
+  await ensureCreditsTables(db);
+  const today = todayStr();
+  const now = nowISO();
+  const results = await db.batch(
+    [
+      {
+        sql: `INSERT OR IGNORE INTO user_credits
+              (openid, balance, total_earned, total_spent, created_at, updated_at)
+              VALUES (?, 0, 0, 0, ?, ?)`,
+        args: [openid, now, now],
+      },
+      {
+        sql: `UPDATE user_credits
+              SET balance = balance + ?, total_earned = total_earned + ?, ${dateColumn} = ?, updated_at = ?
+              WHERE openid = ? AND (${dateColumn} IS NULL OR ${dateColumn} <> ?)
+              RETURNING balance`,
+        args: [amount, amount, today, now, openid, today],
+      },
+      transactionStatement({ openid, type: "earn", amount, reason }),
+    ],
+    "write",
+  );
+
+  const row = results[1].rows[0] as { balance?: number } | undefined;
+  return row ? Number(row.balance) : null;
+}
+
 export async function dailyCheckin(
   db: Client,
   openid: string,
 ): Promise<CheckinResult> {
-  await ensureTables(db);
-
-  const row = await db.execute({
-    sql: "SELECT last_checkin_date FROM user_credits WHERE openid = ? LIMIT 1",
-    args: [openid],
-  });
-
-  const td = todayStr();
-  if (
-    row.rows[0] &&
-    (row.rows[0] as unknown as UserCreditsRow).last_checkin_date === td
-  ) {
-    return { ok: false, reason: "already_checked_in" };
-  }
-
-  const newBalance = await addCredits(db, openid, CHECKIN_REWARD, "checkin");
-
-  await db.execute({
-    sql: "UPDATE user_credits SET last_checkin_date = ?, updated_at = ? WHERE openid = ?",
-    args: [td, nowISO(), openid],
-  });
-
-  return { ok: true, reward: CHECKIN_REWARD, balanceAfter: newBalance };
+  const balanceAfter = await rewardOnce(
+    db,
+    openid,
+    CHECKIN_REWARD,
+    "checkin",
+    "last_checkin_date",
+  );
+  return balanceAfter === null
+    ? { ok: false, reason: "already_checked_in" }
+    : { ok: true, reward: CHECKIN_REWARD, balanceAfter };
 }
 
-/**
- * 每日打开小程序奖励（每人每天 1 次）
- */
 export async function dailyOpenBonus(
   db: Client,
   openid: string,
 ): Promise<DailyOpenResult> {
-  await ensureTables(db);
-
-  const row = await db.execute({
-    sql: "SELECT last_open_date FROM user_credits WHERE openid = ? LIMIT 1",
-    args: [openid],
-  });
-
-  const td = todayStr();
-  if (
-    row.rows[0] &&
-    (row.rows[0] as unknown as UserCreditsRow).last_open_date === td
-  ) {
-    return { ok: false, reason: "already_claimed" };
-  }
-
-  const newBalance = await addCredits(
+  const balanceAfter = await rewardOnce(
     db,
     openid,
     DAILY_OPEN_BONUS,
     "daily_open",
+    "last_open_date",
   );
-
-  await db.execute({
-    sql: "UPDATE user_credits SET last_open_date = ?, updated_at = ? WHERE openid = ?",
-    args: [td, nowISO(), openid],
-  });
-
-  return { ok: true, reward: DAILY_OPEN_BONUS, balanceAfter: newBalance };
+  return balanceAfter === null
+    ? { ok: false, reason: "already_claimed" }
+    : { ok: true, reward: DAILY_OPEN_BONUS, balanceAfter };
 }
 
-/**
- * 获取积分交易流水
- */
 export async function getTransactionHistory(
   db: Client,
   openid: string,
   limit = 50,
   offset = 0,
 ): Promise<TransactionItem[]> {
-  await ensureTables(db);
+  await ensureCreditsTables(db);
   const result = await db.execute({
     sql: `SELECT * FROM credits_transactions
           WHERE openid = ?
@@ -389,7 +346,5 @@ export async function getTransactionHistory(
           LIMIT ? OFFSET ?`,
     args: [openid, Math.max(1, Math.min(100, limit)), Math.max(0, offset)],
   });
-  return (result.rows as unknown as CreditsTransactionRow[]).map(
-    toTransactionItem,
-  );
+  return (result.rows as unknown as CreditsTransactionRow[]).map(toTransactionItem);
 }

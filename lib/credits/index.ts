@@ -10,9 +10,11 @@
 
 export {
   initNewUser,
+  ensureCreditsTables,
   getCreditsInfo,
   checkAndDeduct,
   addCredits,
+  refundUsage,
   dailyCheckin,
   dailyOpenBonus,
   getTransactionHistory,

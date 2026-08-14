@@ -47,13 +47,17 @@ describe('ai-service', () => {
 
       expect(mockedAxios.post).toHaveBeenCalledWith(
         'https://api.test.com/chat/completions',
-        {
+        expect.objectContaining({
           model: 'test-model',
-          messages: [{ role: 'user', content: prompt }],
-          max_tokens: 1000, // default value
-          temperature: 0.7, // default value
+          thinkding: { type: 'disabled' },
+          messages: [
+            expect.objectContaining({ role: 'system' }),
+            { role: 'user', content: prompt },
+          ],
+          max_tokens: 1000,
+          temperature: 0.7,
           stream: false,
-        },
+        }),
         {
           headers: {
             Authorization: 'Bearer test-api-key',

@@ -1,44 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { favoriteDb } from "@/lib/db";
-
-function resolveAuth(req: NextRequest): { openid: string } | null {
-  const isDevelopment = process.env.NODE_ENV === "development";
-  if (isDevelopment) {
-    return { openid: "dev_openid_12345" };
-  }
-
-  const userAgent = req.headers.get("user-agent") || "";
-  if (!userAgent.includes("MicroMessenger")) {
-    return null;
-  }
-
-  const token =
-    req.cookies.get("auth_token")?.value ||
-    req.headers.get("Authorization")?.replace("Bearer ", "");
-
-  if (!token) return null;
-
-  try {
-    const parts = token.split(".");
-    if (parts.length !== 3) return null;
-    const payload = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-    const padded = payload + "=".repeat((4 - (payload.length % 4)) % 4);
-    const decoded = JSON.parse(Buffer.from(padded, "base64").toString());
-    if (typeof decoded.openid === "string" && decoded.openid.length > 0) {
-      return { openid: decoded.openid };
-    }
-  } catch {
-    return null;
-  }
-  return null;
-}
+import { resolveMiniProgramAuth } from "@/lib/api-auth";
 
 export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = resolveAuth(req);
+    const auth = resolveMiniProgramAuth(req);
     if (!auth) {
       return NextResponse.json({ error: "用户未登录" }, { status: 401 });
     }

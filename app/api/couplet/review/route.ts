@@ -5,36 +5,65 @@ import { createCoupletReviewPrompt } from "@/lib/prompt-templates";
 import {
   COUPLET_REVIEW_FALLBACK,
   parseCoupletReviewJson,
+  isCoupletContentShareable,
+  normalizeCoupletLine,
   validateCoupletReviewRequest,
 } from "@/lib/couplet-validation";
 import { resolveCoupletAuth } from "@/lib/couplet-api-auth";
-import { db, coupletDb, userStatsDb } from "@/lib/db";
-import { checkAndDeduct } from "@/lib/credits";
+import { db, coupletDb } from "@/lib/db";
+import { checkAndDeduct, refundUsage } from "@/lib/credits";
 
 export async function POST(req: NextRequest) {
-  try {
-    const isDevelopment = process.env.NODE_ENV === "development";
-    if (!isDevelopment) {
-      const userAgent = req.headers.get("user-agent") || "";
-      if (!userAgent.includes("MicroMessenger")) {
-        return NextResponse.json(
-          { error: "此应用仅支持微信小程序访问，请在微信中打开" },
-          { status: 403 },
-        );
-      }
-    }
+  let chargedOpenid: string | null = null;
+  let refundStarted = false;
 
+  const refundOnce = async (openid: string) => {
+    if (refundStarted) return;
+    refundStarted = true;
+    await refundUsage(db, openid, "couplet_review");
+  };
+
+  try {
     const auth = resolveCoupletAuth(req);
     if (!auth) {
       return NextResponse.json({ error: "用户未登录" }, { status: 401 });
     }
 
-    // ── 积分检查 ──
-    const creditsCheck = await checkAndDeduct(
-      db,
-      auth.openid,
-      "couplet_review",
-    );
+    const validation = validateCoupletReviewRequest(await req.json());
+    if (!validation.valid) {
+      return NextResponse.json({ error: validation.error }, { status: 400 });
+    }
+    let difficulty: "simple" | "medium" | "hard" | undefined = "medium";
+    let reviewedUpperLine = validation.upperLine!;
+    if (validation.recordId) {
+      const record = await coupletDb.getCoupletRecord(validation.recordId);
+      if (!record || record.openid !== auth.openid) {
+        return NextResponse.json({ error: "对联记录不存在" }, { status: 404 });
+      }
+
+      const storedUpperLine = normalizeCoupletLine(String(record.upper_line || ""));
+      if (!storedUpperLine || storedUpperLine !== validation.upperLine) {
+        return NextResponse.json(
+          { error: "上联与原始对联记录不一致" },
+          { status: 400 },
+        );
+      }
+      reviewedUpperLine = storedUpperLine;
+      if (record.difficulty) {
+        difficulty = record.difficulty as "simple" | "medium" | "hard";
+      }
+    }
+
+    // A shareable record must be approved from the exact persisted pair;
+    // the model's response cannot grant this permission.
+    if (!isCoupletContentShareable(reviewedUpperLine, validation.lowerLine!)) {
+      return NextResponse.json(
+        { error: "对联内容不符合分享要求，请修改后重试" },
+        { status: 400 },
+      );
+    }
+
+    const creditsCheck = await checkAndDeduct(db, auth.openid, "couplet_review");
     if (!creditsCheck.ok) {
       return NextResponse.json(
         {
@@ -46,72 +75,62 @@ export async function POST(req: NextRequest) {
         { status: 403 },
       );
     }
+    chargedOpenid = auth.openid;
 
-    const body = await req.json();
-    const validation = validateCoupletReviewRequest(body);
-    if (!validation.valid) {
-      return NextResponse.json({ error: validation.error }, { status: 400 });
-    }
-
-    // 如果有 recordId，从数据库获取难度信息
-    let difficulty: "simple" | "medium" | "hard" | undefined = "medium";
-    if (validation.recordId) {
-      const record = await coupletDb.getCoupletRecord(validation.recordId);
-      if (record && record.difficulty) {
-        difficulty = record.difficulty as "simple" | "medium" | "hard";
-      }
-    }
-
-    const prompt = createCoupletReviewPrompt(
-      validation.upperLine!,
-      validation.lowerLine!,
-      difficulty,
+    const raw = await generateBlessing(
+      createCoupletReviewPrompt(
+        reviewedUpperLine,
+        validation.lowerLine!,
+        difficulty,
+      ),
     );
-    const raw = await generateBlessing(prompt);
-    const review = parseCoupletReviewJson(raw);
-
-    if (!review.canShare) {
+    const parsedReview = parseCoupletReviewJson(raw);
+    if (!parsedReview.canShare) {
+      await refundOnce(auth.openid);
+      chargedOpenid = null;
       return NextResponse.json(
         {
-          error: "对联内容不符合分享要求，请修改后重试",
+          error: "点评结果格式异常，请重试",
           review: COUPLET_REVIEW_FALLBACK,
         },
-        { status: 400 },
+        { status: 502 },
       );
     }
+    // Only deterministic validation decides whether a record may be shared.
+    const review = { ...parsedReview, canShare: true };
 
-    // 更新对联记录：保存下联、评分、总结等信息
     if (validation.recordId) {
-      await coupletDb.updateCoupletScore(
+      const updated = await coupletDb.updateCoupletScore(
         validation.recordId,
         validation.lowerLine!,
         review.score,
         review.summary,
         review.canShare,
       );
+      if (!updated) throw new Error("对联记录更新失败");
     }
 
-    // 初始化用户统计（如果不存在）
-    await userStatsDb.initUserStats(auth.openid);
-
+    chargedOpenid = null;
     return NextResponse.json({ review });
   } catch (error) {
-    console.error("评下联失败:", error);
+    if (chargedOpenid) {
+      try {
+        await refundOnce(chargedOpenid);
+      } catch (refundError) {
+        console.error("评联退款失败:", refundError);
+      }
+    }
 
+    console.error("评下联失败:", error);
     let errorMessage = "评联失败，请重试";
     if (axios.isAxiosError(error)) {
-      if (error.response?.status === 429) {
-        errorMessage = "请求太频繁，请稍后再试";
-      } else if (
-        error.response?.status === 401 ||
-        error.response?.status === 403
-      ) {
+      if (error.response?.status === 429) errorMessage = "请求太频繁，请稍后再试";
+      else if (error.response?.status === 401 || error.response?.status === 403) {
         errorMessage = "服务暂时不可用";
       }
     } else if (error instanceof Error && error.message.includes("429")) {
       errorMessage = "请求太频繁，请稍后再试";
     }
-
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }

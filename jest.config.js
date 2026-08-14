@@ -19,6 +19,8 @@ const customJestConfig = {
     '^@/(.*)$': '<rootDir>/$1',
   },
   
+  modulePathIgnorePatterns: ['<rootDir>/.next/'],
+  
   // 使用 jsdom 环境模拟浏览器环境
   testEnvironment: 'jest-environment-jsdom',
   

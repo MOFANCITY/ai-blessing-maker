@@ -1,5 +1,6 @@
 // 导入 HTTP 客户端库
 import axios from "axios";
+import { AI_SYSTEM_INSTRUCTIONS } from "@/lib/prompt-safety";
 
 /**
  * AI 服务配置接口
@@ -17,6 +18,10 @@ interface AIConfig {
  * @param config - AI 服务配置信息
  * @param prompt - 发送给 AI 的提示词
  * @returns Promise<string> - AI 生成的回复内容
+ *
+ * The caller prompt may contain user material only inside explicit untrusted
+ * data boundaries. The system message is sent as a separate higher-priority
+ * chat message and must never be composed from request data.
  * @throws Error - 当 API 调用失败时抛出异常
  */
 export async function callAI(
@@ -31,7 +36,10 @@ export async function callAI(
       thinkding: {
         type: "disabled",
       },
-      messages: [{ role: "user", content: prompt }],
+      messages: [
+        { role: "system", content: AI_SYSTEM_INSTRUCTIONS },
+        { role: "user", content: prompt },
+      ],
       max_tokens: Number(process.env.AI_MAX_TOKENS) || 1000, // 最大生成 token 数
       temperature: Number(process.env.AI_TEMPERATURE) || 0.7, // 生成随机性（0-1）
       stream: false, // 不使用流式输出

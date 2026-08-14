@@ -11,6 +11,7 @@ jest.mock('@/lib/db', () => ({
   db: { execute: jest.fn() },
   poemDb: {
     insertPoemRecord: jest.fn().mockResolvedValue({ id: 1 }),
+    getPoemRecord: jest.fn().mockResolvedValue(null),
     updatePoemUserLines: jest.fn().mockResolvedValue({ id: 1 }),
     getPoemHistory: jest.fn().mockResolvedValue([]),
   },
@@ -25,6 +26,10 @@ jest.mock('@/lib/db', () => ({
 }));
 jest.mock('axios', () => ({
   isAxiosError: jest.fn(),
+}));
+jest.mock('@/lib/credits', () => ({
+  checkAndDeduct: jest.fn().mockResolvedValue({ ok: true, balanceAfter: 9 }),
+  refundUsage: jest.fn().mockResolvedValue(10),
 }));
 
 const mockGenerateBlessing = aiService.generateBlessing as jest.MockedFunction<typeof aiService.generateBlessing>;
@@ -77,6 +82,7 @@ describe('POST /api/poem', () => {
         lines: ['春风拂柳岸', '细雨润花香'],
         type: 'poem5',
         theme: '春天',
+        recordId: 1,
       });
       expect(mockGenerateBlessing).toHaveBeenCalledWith('PROMPT');
     });
@@ -121,7 +127,7 @@ describe('POST /api/poem', () => {
 
       await POST(makeRequest({ type: 'poem5', theme: '春天', gameMode: true }));
 
-      expect(mockCreatePoemPrompt).toHaveBeenCalledWith('poem5', '春天', true, undefined);
+      expect(mockCreatePoemPrompt).toHaveBeenCalledWith('poem5', '春天', false, undefined);
     });
 
     it('saves poem record to DB with joined aiLines and gameMode flag', async () => {

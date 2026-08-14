@@ -1,223 +1,105 @@
-import { POST } from '@/app/api/blessing/route'
-import { NextRequest } from 'next/server'
-import * as aiService from '@/lib/ai-service'
-import * as promptTemplates from '@/lib/prompt-templates'
-import axios from 'axios'
+import { NextRequest } from "next/server";
+import axios from "axios";
+import * as aiService from "@/lib/ai-service";
+import * as promptTemplates from "@/lib/prompt-templates";
+import { db, historyDb } from "@/lib/db";
+import { checkAndDeduct, refundUsage } from "@/lib/credits";
 
-// Mock dependencies
-jest.mock('@/lib/ai-service')
-jest.mock('@/lib/prompt-templates')
-jest.mock('axios', () => ({
-  isAxiosError: jest.fn()
-}))
+jest.mock("@/lib/ai-service");
+jest.mock("@/lib/prompt-templates");
+jest.mock("@/lib/db", () => ({
+  __esModule: true,
+  db: { execute: jest.fn() },
+  historyDb: { addHistory: jest.fn() },
+}));
+jest.mock("@/lib/api-auth", () => ({
+  isWeChatRequest: jest.fn(() => true),
+  resolveAuth: jest.fn(() => ({ openid: "openid-1" })),
+}));
+jest.mock("@/lib/credits", () => ({
+  checkAndDeduct: jest.fn(),
+  refundUsage: jest.fn(),
+}));
+jest.mock("axios", () => ({ isAxiosError: jest.fn() }));
 
-const mockGenerateBlessing = aiService.generateBlessing as jest.MockedFunction<
-  typeof aiService.generateBlessing
->
+import { POST } from "@/app/api/blessing/route";
 
-const mockCreateBlessingPrompt = promptTemplates.createBlessingPrompt as jest.MockedFunction<
-  typeof promptTemplates.createBlessingPrompt
->
+const mockGenerateBlessing = aiService.generateBlessing as jest.MockedFunction<typeof aiService.generateBlessing>;
+const mockCreateBlessingPrompt = promptTemplates.createBlessingPrompt as jest.MockedFunction<typeof promptTemplates.createBlessingPrompt>;
+const mockExecute = db.execute as jest.MockedFunction<typeof db.execute>;
+const mockAddHistory = historyDb.addHistory as jest.MockedFunction<typeof historyDb.addHistory>;
+const mockCheckAndDeduct = checkAndDeduct as jest.MockedFunction<typeof checkAndDeduct>;
+const mockRefundUsage = refundUsage as jest.MockedFunction<typeof refundUsage>;
+const mockIsAxiosError = axios.isAxiosError as jest.MockedFunction<typeof axios.isAxiosError>;
 
-const mockIsAxiosError = axios.isAxiosError as jest.MockedFunction<typeof axios.isAxiosError>
+function makeRequest(body: unknown) {
+  return { json: jest.fn().mockResolvedValue(body) } as unknown as NextRequest;
+}
 
-describe('/api/blessing', () => {
+const validRequest = {
+  occasion: "birthday",
+  festival: "",
+  targetPerson: "friend",
+  useSmartMode: false,
+};
+
+describe("POST /api/blessing", () => {
   beforeEach(() => {
-    jest.clearAllMocks()
-    // Reset axios.isAxiosError to default behavior
-    mockIsAxiosError.mockReturnValue(false)
-  })
+    jest.clearAllMocks();
+    mockIsAxiosError.mockReturnValue(false);
+    mockCheckAndDeduct.mockResolvedValue({ ok: true, balance: 10, needed: 0 });
+    mockExecute.mockResolvedValue({ rows: [{ id: "user-1" }] } as never);
+    mockAddHistory.mockResolvedValue({ id: 42 } as never);
+  });
 
-  it('successfully generates blessing with smart mode', async () => {
-    const requestBody = {
-      scenario: '',
-      festival: '',
-      targetPerson: '',
-      customDescription: '为朋友的生日祝福',
-      useSmartMode: true
-    }
+  it("returns generated content and its history id after charging", async () => {
+    mockCreateBlessingPrompt.mockReturnValue("PROMPT");
+    mockGenerateBlessing.mockResolvedValue("祝你生日快乐，健康快乐每一天！");
 
-    const mockPrompt = '请为朋友生成生日祝福语'
-    const mockBlessing = '祝你生日快乐，健康快乐每一天！'
+    const response = await POST(makeRequest(validRequest));
 
-    mockCreateBlessingPrompt.mockReturnValue(mockPrompt)
-    mockGenerateBlessing.mockResolvedValue(mockBlessing)
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      blessing: "祝你生日快乐，健康快乐每一天！",
+      recordId: 42,
+    });
+    expect(mockCheckAndDeduct).toHaveBeenCalledWith(db, "openid-1", "blessing");
+    expect(mockRefundUsage).not.toHaveBeenCalled();
+  });
 
-    const mockRequest = {
-      json: jest.fn().mockResolvedValue(requestBody)
-    } as unknown as NextRequest
+  it("refunds exactly once when generation fails after charging", async () => {
+    mockCreateBlessingPrompt.mockReturnValue("PROMPT");
+    const error = new Error("AI unavailable");
+    mockGenerateBlessing.mockRejectedValue(error);
 
-    const response = await POST(mockRequest)
-    const responseData = await response.json()
+    const response = await POST(makeRequest(validRequest));
 
-    expect(mockCreateBlessingPrompt).toHaveBeenCalledWith(requestBody)
-    expect(mockGenerateBlessing).toHaveBeenCalledWith(mockPrompt)
-    expect(response.status).toBe(200)
-    expect(responseData).toEqual({ blessing: mockBlessing })
-  })
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toEqual({ error: "生成失败，请重试" });
+    expect(mockRefundUsage).toHaveBeenCalledTimes(1);
+    expect(mockRefundUsage).toHaveBeenCalledWith(db, "openid-1", "blessing");
+  });
 
-  it('successfully generates blessing with template mode', async () => {
-    const requestBody = {
-      occasion: 'birthday',
-      festival: 'spring-festival',
-      targetPerson: 'colleague',
-      style: 'formal',
-      useSmartMode: false
-    }
+  it("does not refund when only the optional history write fails", async () => {
+    mockCreateBlessingPrompt.mockReturnValue("PROMPT");
+    mockGenerateBlessing.mockResolvedValue("已生成祝福");
+    mockAddHistory.mockRejectedValue(new Error("history unavailable"));
 
-    const mockPrompt = '请生成正式的春节生日祝福语给同事'
-    const mockBlessing = '祝您在新的一年里工作顺利，身体健康！'
+    const response = await POST(makeRequest(validRequest));
 
-    mockCreateBlessingPrompt.mockReturnValue(mockPrompt)
-    mockGenerateBlessing.mockResolvedValue(mockBlessing)
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ blessing: "已生成祝福", recordId: null });
+    expect(mockRefundUsage).not.toHaveBeenCalled();
+  });
 
-    const mockRequest = {
-      json: jest.fn().mockResolvedValue(requestBody)
-    } as unknown as NextRequest
+  it("uses the friendly rate-limit message for an upstream 429", async () => {
+    mockCreateBlessingPrompt.mockReturnValue("PROMPT");
+    mockIsAxiosError.mockReturnValue(true);
+    mockGenerateBlessing.mockRejectedValue({ response: { status: 429 } });
 
-    const response = await POST(mockRequest)
-    const responseData = await response.json()
+    const response = await POST(makeRequest(validRequest));
 
-    expect(mockCreateBlessingPrompt).toHaveBeenCalledWith(requestBody)
-    expect(mockGenerateBlessing).toHaveBeenCalledWith(mockPrompt)
-    expect(response.status).toBe(200)
-    expect(responseData).toEqual({ blessing: mockBlessing })
-  })
-
-  it('handles AI service errors gracefully', async () => {
-    const requestBody = {
-      occasion: 'birthday',
-      festival: '',
-      targetPerson: 'friend',
-      useSmartMode: false
-    }
-
-    const mockPrompt = '请生成生日祝福语'
-    const aiError = new Error('AI服务暂时不可用')
-
-    mockCreateBlessingPrompt.mockReturnValue(mockPrompt)
-    mockGenerateBlessing.mockRejectedValue(aiError)
-
-    const mockRequest = {
-      json: jest.fn().mockResolvedValue(requestBody)
-    } as unknown as NextRequest
-
-    const response = await POST(mockRequest)
-    const responseData = await response.json()
-
-    expect(response.status).toBe(500)
-    expect(responseData).toEqual({ error: '生成失败，请重试' })
-  })
-
-  it('handles axios 429 errors with rate limit message', async () => {
-    const requestBody = {
-      occasion: 'birthday',
-      festival: '',
-      targetPerson: 'friend',
-      useSmartMode: false
-    }
-
-    const mockPrompt = '请生成生日祝福语'
-    const axiosError = {
-      isAxiosError: true,
-      response: {
-        status: 429,
-        data: {
-          error: {
-            message: 'Rate limit exceeded'
-          }
-        }
-      },
-      message: 'Request failed'
-    }
-
-    // Mock axios.isAxiosError to return true
-    mockIsAxiosError.mockReturnValue(true)
-
-    mockCreateBlessingPrompt.mockReturnValue(mockPrompt)
-    mockGenerateBlessing.mockRejectedValue(axiosError)
-
-    const mockRequest = {
-      json: jest.fn().mockResolvedValue(requestBody)
-    } as unknown as NextRequest
-
-    const response = await POST(mockRequest)
-    const responseData = await response.json()
-
-    expect(response.status).toBe(500)
-    expect(responseData.error).toBe('请求太频繁，请稍后再试')
-  })
-
-  it('handles generic axios errors with default message', async () => {
-    const requestBody = {
-      occasion: 'birthday',
-      festival: '',
-      targetPerson: 'friend',
-      useSmartMode: false
-    }
-
-    const mockPrompt = '请生成生日祝福语'
-    const axiosError = {
-      isAxiosError: true,
-      response: {
-        status: 500
-      },
-      message: '网络连接失败'
-    }
-
-    // Mock axios.isAxiosError to return true
-    mockIsAxiosError.mockReturnValue(true)
-
-    mockCreateBlessingPrompt.mockReturnValue(mockPrompt)
-    mockGenerateBlessing.mockRejectedValue(axiosError)
-
-    const mockRequest = {
-      json: jest.fn().mockResolvedValue(requestBody)
-    } as unknown as NextRequest
-
-    const response = await POST(mockRequest)
-    const responseData = await response.json()
-
-    expect(response.status).toBe(500)
-    expect(responseData.error).toBe('生成失败，请重试')
-  })
-
-  it('handles request parsing errors', async () => {
-    const mockRequest = {
-      json: jest.fn().mockRejectedValue(new Error('Invalid JSON'))
-    } as unknown as NextRequest
-
-    const response = await POST(mockRequest)
-    const responseData = await response.json()
-
-    expect(response.status).toBe(500)
-    expect(responseData.error).toBe('生成失败，请重试')
-  })
-
-  it('logs errors to console', async () => {
-    const consoleSpy = jest.spyOn(console, 'error').mockImplementation()
-
-    const requestBody = {
-      occasion: 'birthday',
-      festival: '',
-      targetPerson: 'friend',
-      useSmartMode: false
-    }
-
-    const mockPrompt = '请生成生日祝福语'
-    const error = new Error('测试错误')
-
-    mockCreateBlessingPrompt.mockReturnValue(mockPrompt)
-    mockGenerateBlessing.mockRejectedValue(error)
-
-    const mockRequest = {
-      json: jest.fn().mockResolvedValue(requestBody)
-    } as unknown as NextRequest
-
-    await POST(mockRequest)
-
-    expect(consoleSpy).toHaveBeenCalledWith('生成祝福语失败:', error)
-    
-    consoleSpy.mockRestore()
-  })
-})
+    await expect(response.json()).resolves.toEqual({ error: "请求太频繁，请稍后再试" });
+    expect(mockRefundUsage).toHaveBeenCalledTimes(1);
+  });
+});

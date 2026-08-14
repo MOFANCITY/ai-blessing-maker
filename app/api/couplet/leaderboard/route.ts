@@ -1,48 +1,112 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { isWeChatRequest, resolveAuth } from "@/lib/api-auth";
+
+interface RankingRow {
+  id: number;
+  openid: string;
+  upper_line: string;
+  lower_line: string | null;
+  theme: string;
+  difficulty: string | null;
+  score: number;
+  review_summary: string | null;
+  shared_at: string;
+  nickname: string | null;
+  avatar_url: string | null;
+}
+
+interface PersonalRecordRow {
+  id: number;
+  upper_line: string;
+  lower_line: string | null;
+  theme: string;
+  difficulty: string | null;
+  score: number | null;
+  review_summary: string | null;
+  is_shared: number;
+  created_at: string;
+}
+
+interface PersonalStatsRow {
+  total_count: number;
+  completed_count: number;
+  avg_score: number | null;
+  share_count: number;
+}
+
+function parseLimit(value: string | null): number | null {
+  if (!value) return 20;
+  if (!/^\d+$/.test(value)) return null;
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 1) return null;
+  return Math.min(parsed, 50);
+}
+
+function currentWeekStart(): string {
+  const now = new Date();
+  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const weekday = start.getUTCDay() || 7;
+  start.setUTCDate(start.getUTCDate() - weekday + 1);
+  return start.toISOString();
+}
+
+async function getWeeklyUserRank(openid: string, weekStart: string): Promise<number | null> {
+  const bestResult = await db.execute({
+    sql: `SELECT score, shared_at
+          FROM couplet_records
+          WHERE openid = ? AND score >= 3 AND is_shared = 1 AND shared_at >= ?
+          ORDER BY score DESC, shared_at ASC
+          LIMIT 1`,
+    args: [openid, weekStart],
+  });
+  const best = bestResult.rows[0] as unknown as { score: number; shared_at: string } | undefined;
+  if (!best) return null;
+
+  const countResult = await db.execute({
+    sql: `SELECT COUNT(*) AS rank_position
+          FROM couplet_records
+          WHERE score >= 3 AND is_shared = 1 AND shared_at >= ?
+            AND (score > ? OR (score = ? AND shared_at < ?))`,
+    args: [weekStart, best.score, best.score, best.shared_at],
+  });
+  const count = Number((countResult.rows[0] as unknown as { rank_position?: number })?.rank_position ?? 0);
+  return count + 1;
+}
 
 export async function GET(req: NextRequest) {
   try {
-    const isDevelopment = process.env.NODE_ENV === "development";
-    if (!isDevelopment) {
-      const userAgent = req.headers.get("user-agent") || "";
-      if (!userAgent.includes("MicroMessenger")) {
-        return NextResponse.json(
-          { error: "此应用仅支持微信小程序访问，请在微信中打开" },
-          { status: 403 }
-        );
-      }
+    if (!isWeChatRequest(req)) {
+      return NextResponse.json(
+        { error: "此应用仅支持微信小程序访问，请在微信中打开" },
+        { status: 403 },
+      );
     }
+    const auth = resolveAuth(req);
+    if (!auth) return NextResponse.json({ error: "用户未登录" }, { status: 401 });
 
     const { searchParams } = new URL(req.url);
     const type = searchParams.get("type") || "weekly";
-    const limit = Math.min(parseInt(searchParams.get("limit") || "20"), 50);
-    const openid = searchParams.get("openid");
+    const limit = parseLimit(searchParams.get("limit"));
+    if (!limit || (type !== "weekly" && type !== "personal")) {
+      return NextResponse.json({ error: "参数无效" }, { status: 400 });
+    }
 
     if (type === "weekly") {
-      // 获取本周排行榜（≥3星且已分享）
+      const weekStart = currentWeekStart();
       const result = await db.execute({
-        sql: `SELECT 
-              cr.id,
-              cr.openid,
-              cr.upper_line,
-              cr.lower_line,
-              cr.theme,
-              cr.difficulty,
-              cr.score,
-              cr.review_summary,
-              cr.shared_at,
-              u.nickname,
-              u.avatar_url
-            FROM couplet_records cr
-            LEFT JOIN users u ON cr.openid = u.openid
-            WHERE cr.score >= 3 AND cr.is_shared = 1
-            ORDER BY cr.score DESC, cr.shared_at DESC
-            LIMIT ?`,
-        args: [limit],
+        sql: `SELECT cr.id, cr.openid, cr.upper_line, cr.lower_line, cr.theme,
+                     cr.difficulty, cr.score, cr.review_summary, cr.shared_at,
+                     u.nickname, u.avatar_url
+              FROM couplet_records cr
+              LEFT JOIN users u ON cr.openid = u.openid
+              WHERE cr.score >= 3 AND cr.is_shared = 1 AND cr.shared_at >= ?
+              ORDER BY cr.score DESC, cr.shared_at ASC
+              LIMIT ?`,
+        args: [weekStart, limit],
       });
-
-      const rankings = (result.rows as any[]).map((row, index) => ({
+      const rows = result.rows as unknown as RankingRow[];
+      const rankings = rows.map((row, index) => ({
         rank: index + 1,
         recordId: row.id,
         openid: row.openid,
@@ -57,88 +121,59 @@ export async function GET(req: NextRequest) {
         sharedAt: row.shared_at,
       }));
 
-      // 如果提供了 openid，找出用户的排名
-      let userRank = null;
-      if (openid) {
-        const userRankResult = await db.execute({
-          sql: `SELECT COUNT(*) as rank_position
-                FROM couplet_records
-                WHERE score >= 3 AND is_shared = 1
-                AND (score > (
-                  SELECT score FROM couplet_records 
-                  WHERE openid = ? 
-                  ORDER BY score DESC LIMIT 1
-                ) OR (
-                  score = (
-                    SELECT score FROM couplet_records 
-                    WHERE openid = ? 
-                    ORDER BY score DESC LIMIT 1
-                  ) AND shared_at < (
-                    SELECT shared_at FROM couplet_records 
-                    WHERE openid = ? 
-                    ORDER BY score DESC LIMIT 1
-                  )
-                ))`,
-          args: [openid, openid, openid],
-        });
-        const rankPos = Number(userRankResult.rows[0].rank_position) || 0;
-        userRank = rankPos + 1;
-      }
-
       return NextResponse.json({
         type: "weekly",
         rankings,
-        userRank,
+        userRank: await getWeeklyUserRank(auth.openid, weekStart),
         total: rankings.length,
       });
-    } else if (type === "personal" && openid) {
-      // 获取用户个人对联历史
-      const result = await db.execute({
-        sql: `SELECT *
-              FROM couplet_records
-              WHERE openid = ?
-              ORDER BY created_at DESC
-              LIMIT ?`,
-        args: [openid, limit],
-      });
+    }
 
-      // 计算统计信息
-      const statsResult = await db.execute({
-        sql: `SELECT 
-              COUNT(*) as total_count,
-              SUM(CASE WHEN score IS NOT NULL THEN 1 ELSE 0 END) as completed_count,
-              AVG(CASE WHEN score IS NOT NULL THEN score END) as avg_score,
-              COUNT(CASE WHEN is_shared = 1 THEN 1 END) as share_count
+    // Never take the owner from query params: a valid token only exposes its
+    // own private couplet history.
+    const result = await db.execute({
+      sql: `SELECT * FROM couplet_records
+            WHERE openid = ?
+            ORDER BY created_at DESC
+            LIMIT ?`,
+      args: [auth.openid, limit],
+    });
+    const statsResult = await db.execute({
+      sql: `SELECT COUNT(*) AS total_count,
+                   SUM(CASE WHEN score IS NOT NULL THEN 1 ELSE 0 END) AS completed_count,
+                   AVG(CASE WHEN score IS NOT NULL THEN score END) AS avg_score,
+                   COUNT(CASE WHEN is_shared = 1 THEN 1 END) AS share_count
             FROM couplet_records
             WHERE openid = ?`,
-        args: [openid],
-      });
+      args: [auth.openid],
+    });
+    const stats = (statsResult.rows[0] as unknown as PersonalStatsRow | undefined) ?? {
+      total_count: 0,
+      completed_count: 0,
+      avg_score: null,
+      share_count: 0,
+    };
 
-      const stats = statsResult.rows[0] as any;
-
-      return NextResponse.json({
-        type: "personal",
-        records: (result.rows as any[]).map((row) => ({
-          recordId: row.id,
-          upperLine: row.upper_line,
-          lowerLine: row.lower_line,
-          theme: row.theme,
-          difficulty: row.difficulty,
-          score: row.score,
-          summary: row.review_summary,
-          isShared: row.is_shared,
-          createdAt: row.created_at,
-        })),
-        stats: {
-          totalCount: Number(stats.total_count) || 0,
-          completedCount: Number(stats.completed_count) || 0,
-          avgScore: parseFloat(stats.avg_score || 0).toFixed(2),
-          shareCount: Number(stats.share_count) || 0,
-        },
-      });
-    } else {
-      return NextResponse.json({ error: "参数无效" }, { status: 400 });
-    }
+    return NextResponse.json({
+      type: "personal",
+      records: (result.rows as unknown as PersonalRecordRow[]).map((row) => ({
+        recordId: row.id,
+        upperLine: row.upper_line,
+        lowerLine: row.lower_line,
+        theme: row.theme,
+        difficulty: row.difficulty,
+        score: row.score,
+        summary: row.review_summary,
+        isShared: row.is_shared,
+        createdAt: row.created_at,
+      })),
+      stats: {
+        totalCount: Number(stats.total_count) || 0,
+        completedCount: Number(stats.completed_count) || 0,
+        avgScore: Number(stats.avg_score ?? 0).toFixed(2),
+        shareCount: Number(stats.share_count) || 0,
+      },
+    });
   } catch (error) {
     console.error("获取排行榜失败:", error);
     return NextResponse.json({ error: "获取排行榜失败，请重试" }, { status: 500 });

@@ -529,6 +529,21 @@ export { db };
 // ========================
 
 let poemTableReady: Promise<void> | null = null;
+
+async function ensurePoemStatusColumn() {
+  try {
+    await db.execute(
+      "ALTER TABLE poem_records ADD COLUMN status TEXT NOT NULL DEFAULT 'draft'",
+    );
+  } catch (error) {
+    // Existing deployments have the original table without `status`; SQLite
+    // reports a duplicate-column error once the additive migration has run.
+    if (!(error instanceof Error) || !error.message.includes("duplicate column name")) {
+      throw error;
+    }
+  }
+}
+
 function ensurePoemTable() {
   if (poemTableReady) return poemTableReady;
   poemTableReady = db
@@ -543,9 +558,11 @@ function ensurePoemTable() {
       ai_lines TEXT NOT NULL,
       user_lines TEXT,
       result TEXT,
+      status TEXT NOT NULL DEFAULT 'draft',
       created_at INTEGER NOT NULL
     )`,
     )
+    .then(() => ensurePoemStatusColumn())
     .then(() =>
       db.execute(
         `CREATE INDEX IF NOT EXISTS idx_poem_records_user_id_created
@@ -579,8 +596,8 @@ export const poemDb = {
     const createdAt = Date.now();
     const result = await db.execute({
       sql: `INSERT INTO poem_records
-            (user_id, type, theme, game_mode, extras, ai_lines, user_lines, result, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (user_id, type, theme, game_mode, extras, ai_lines, user_lines, result, status, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING *`,
       args: [
         data.user_id,
@@ -591,10 +608,22 @@ export const poemDb = {
         data.aiLines,
         data.userLines ?? null,
         data.result ?? null,
+        data.result ? "completed" : "draft",
         createdAt,
       ],
     });
     return result.rows[0];
+  },
+
+  async getPoemRecord(recordId: number | string, userId: string) {
+    await ensurePoemTable();
+    const result = await db.execute({
+      sql: `SELECT * FROM poem_records
+            WHERE id = ? AND user_id = ? AND status = 'draft'
+            LIMIT 1`,
+      args: [recordId, userId],
+    });
+    return result.rows[0] ?? null;
   },
 
   /**
@@ -602,18 +631,19 @@ export const poemDb = {
    */
   async updatePoemUserLines(
     recordId: number | string,
+    userId: string,
     userLines: string[],
-    result?: string | null,
+    result: string,
   ) {
     await ensurePoemTable();
     const updated = await db.execute({
       sql: `UPDATE poem_records
-            SET user_lines = ?, result = ?
-            WHERE id = ?
+            SET user_lines = ?, result = ?, status = 'completed'
+            WHERE id = ? AND user_id = ? AND status = 'draft'
             RETURNING *`,
-      args: [userLines.join("\n"), result ?? null, recordId],
+      args: [userLines.join("\n"), result, recordId, userId],
     });
-    return updated.rows[0];
+    return updated.rows[0] ?? null;
   },
 
   /**
@@ -723,7 +753,7 @@ export const favoriteDb = {
    */
   async addFavorite(data: {
     user_id: string;
-    content_type: "blessing" | "diss" | "couplet" | "poem";
+    content_type: string;
     content_id?: string | null;
     title: string;
     content: string;

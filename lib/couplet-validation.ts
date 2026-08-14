@@ -1,4 +1,5 @@
 import { cleanText } from "@/lib/validation";
+import { containsPromptInjectionAttempt } from "@/lib/prompt-safety";
 
 const BLOCKED_PATTERNS = [
   /<script/i,
@@ -37,7 +38,20 @@ function countChars(line: string): number {
 }
 
 function hasBlockedContent(text: string): boolean {
-  return BLOCKED_PATTERNS.some((pattern) => pattern.test(text));
+  return containsPromptInjectionAttempt(text)
+    || BLOCKED_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+const SHARE_BLOCKED_PATTERNS = [
+  /自杀|自残|杀人|爆炸|制毒|强奸|恐怖袭击/,
+  /仇恨|种族灭绝|纳粹/,
+];
+
+/** A deterministic gate for share eligibility; model output is never authoritative. */
+export function isCoupletContentShareable(upperLine: string, lowerLine: string): boolean {
+  return !hasBlockedContent(upperLine)
+    && !hasBlockedContent(lowerLine)
+    && !SHARE_BLOCKED_PATTERNS.some((pattern) => pattern.test(`${upperLine}\n${lowerLine}`));
 }
 
 export function normalizeCoupletLine(text: string): string {
@@ -136,10 +150,10 @@ export function normalizeUpperLineFromAI(raw: string): string {
 
 export const COUPLET_REVIEW_FALLBACK: CoupletReviewResult = {
   score: 4,
-  summary: "差强人意，但可以分享给朋友看看",
-  strengths: ["有点儿意思"],
-  suggestions: ["尝试先从平仄押韵开始"],
-  canShare: true,
+  summary: "点评结果格式异常，请重新评联",
+  strengths: [],
+  suggestions: ["请重新生成点评"],
+  canShare: false,
 };
 
 export function parseCoupletReviewJson(raw: string): CoupletReviewResult {
@@ -151,29 +165,44 @@ export function parseCoupletReviewJson(raw: string): CoupletReviewResult {
 
   try {
     const parsed = JSON.parse(jsonMatch[0]) as Partial<CoupletReviewResult>;
-    const score = Math.min(5, Math.max(1, Number(parsed.score) || 4));
+    const scoreValue = Number(parsed.score);
+    if (
+      !Number.isInteger(scoreValue)
+      || scoreValue < 1
+      || scoreValue > 5
+      || typeof parsed.summary !== "string"
+      || !Array.isArray(parsed.strengths)
+      || !Array.isArray(parsed.suggestions)
+    ) {
+      return COUPLET_REVIEW_FALLBACK;
+    }
+    const score = scoreValue;
     const summary =
       typeof parsed.summary === "string" && parsed.summary.trim()
-        ? parsed.summary.trim().slice(0, 30)
+        ? cleanText(parsed.summary).slice(0, 30)
         : COUPLET_REVIEW_FALLBACK.summary;
 
     const strengths = Array.isArray(parsed.strengths)
       ? parsed.strengths
           .filter(
-            (s): s is string => typeof s === "string" && s.trim().length > 0,
+            (s): s is string => typeof s === "string" && cleanText(s).length > 0,
           )
+          .map((s) => cleanText(s).slice(0, 30))
           .slice(0, 2)
       : COUPLET_REVIEW_FALLBACK.strengths;
 
     const suggestions = Array.isArray(parsed.suggestions)
       ? parsed.suggestions
           .filter(
-            (s): s is string => typeof s === "string" && s.trim().length > 0,
+            (s): s is string => typeof s === "string" && cleanText(s).length > 0,
           )
+          .map((s) => cleanText(s).slice(0, 30))
           .slice(0, 2)
       : [];
 
-    const canShare = parsed.canShare === false ? false : true;
+    // This flag means the model response passed the strict output schema.
+    // The route replaces it with the deterministic share-policy result.
+    const canShare = true;
 
     return { score, summary, strengths, suggestions, canShare };
   } catch {

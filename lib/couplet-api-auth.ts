@@ -1,37 +1,24 @@
 import { NextRequest } from "next/server";
-import { verifyToken } from "@/lib/auth";
+import { isWeChatRequest, resolveAuth } from "@/lib/api-auth";
 
 export interface CoupletAuthContext {
   isDevelopment: boolean;
   openid: string;
 }
 
+/**
+ * Compatibility wrapper for couplet routes.
+ * Authentication itself is delegated to the shared, signature-verifying API
+ * helper so all protected endpoints apply the same token rules.
+ */
 export function resolveCoupletAuth(req: NextRequest): CoupletAuthContext | null {
-  const isDevelopment = process.env.NODE_ENV === "development";
+  if (!isWeChatRequest(req)) return null;
 
-  if (!isDevelopment) {
-    const userAgent = req.headers.get("user-agent") || "";
-    if (!userAgent.includes("MicroMessenger")) {
-      return null;
-    }
-  }
+  const auth = resolveAuth(req);
+  if (!auth) return null;
 
-  if (isDevelopment) {
-    return { isDevelopment: true, openid: "dev_openid_12345" };
-  }
-
-  const token =
-    req.cookies.get("auth_token")?.value ||
-    req.headers.get("Authorization")?.replace("Bearer ", "");
-
-  if (!token) {
-    return null;
-  }
-
-  const decoded = verifyToken(token);
-  if (!decoded) {
-    return null;
-  }
-
-  return { isDevelopment: false, openid: decoded.openid };
+  return {
+    isDevelopment: process.env.NODE_ENV === "development",
+    openid: auth.openid,
+  };
 }

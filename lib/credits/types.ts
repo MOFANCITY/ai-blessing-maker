@@ -75,4 +75,6 @@ export type CreditsReason =
   | "checkin"
   | "daily_open"
   | "ai_usage"
+  | "ai_refund"
+  | "share"
   | "admin_adjust";

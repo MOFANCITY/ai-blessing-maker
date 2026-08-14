@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { verifyToken } from '@/lib/auth';
+import { getAuthToken, resolveAuth } from '@/lib/api-auth';
 
 /**
  * 获取用户资料
@@ -8,22 +8,10 @@ import { verifyToken } from '@/lib/auth';
  */
 export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
-    // 从 Cookie 获取 token
-    const token = request.cookies.get('auth_token')?.value || request.headers.get('authorization')?.replace('Bearer ', '');
-
-    if (!token) {
-      return NextResponse.json(
-        { error: '用户未登录' },
-        { status: 401 }
-      );
-    }
-
-    // 验证 token
-    const decoded = verifyToken(token);
-
+    const decoded = resolveAuth(request);
     if (!decoded) {
       return NextResponse.json(
-        { error: '登录已过期' },
+        { error: getAuthToken(request) ? '登录已过期' : '用户未登录' },
         { status: 401 }
       );
     }
@@ -69,22 +57,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
  */
 export async function PUT(request: NextRequest): Promise<NextResponse> {
   try {
-    // 从 Cookie 获取 token
-    const token = request.cookies.get('auth_token')?.value || request.headers.get('authorization')?.replace('Bearer ', '');
-
-    if (!token) {
-      return NextResponse.json(
-        { error: '用户未登录' },
-        { status: 401 }
-      );
-    }
-
-    // 验证 token
-    const decoded = verifyToken(token);
-
+    const decoded = resolveAuth(request);
     if (!decoded) {
       return NextResponse.json(
-        { error: '登录已过期' },
+        { error: getAuthToken(request) ? '登录已过期' : '用户未登录' },
         { status: 401 }
       );
     }

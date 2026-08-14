@@ -3,9 +3,9 @@ import axios from "axios";
 import { generateBlessing } from "@/lib/ai-service";
 import { createPoemPrompt } from "@/lib/prompt-templates";
 import { validatePoemInput } from "@/lib/validation";
-import { db } from "@/lib/db";
+import { db, poemDb } from "@/lib/db";
 import { resolveAuth, isWeChatRequest } from "@/lib/api-auth";
-import { checkAndDeduct } from "@/lib/credits";
+import { checkAndDeduct, refundUsage } from "@/lib/credits";
 
 interface PoemRequest {
   type?: unknown;
@@ -20,23 +20,26 @@ function parsePoemResponse(
 ): string[] | null {
   const lines = raw
     .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0);
-
+    .map((line) => line.trim())
+    .filter(Boolean);
   if (lines.length < 2) return null;
 
   const firstTwo = lines.slice(0, 2);
   for (const line of firstTwo) {
-    // Count only CJK chars; reject if any non-CJK chars remain or length doesn't match
-    const cjkCount = [...line].filter((c) => /[\u4e00-\u9fff]/.test(c)).length;
-    if (cjkCount !== expectedCharsPerLine) return null;
-    // Also reject if there are any extra non-CJK chars (digits, latin, punctuation)
-    if (line.length !== cjkCount) return null;
+    const characters = Array.from(line);
+    if (
+      characters.length !== expectedCharsPerLine ||
+      characters.some((character) => !/[\u4e00-\u9fff]/.test(character))
+    ) {
+      return null;
+    }
   }
   return firstTwo;
 }
 
 export async function POST(req: NextRequest) {
+  let chargedOpenid: string | null = null;
+
   try {
     if (!isWeChatRequest(req)) {
       return NextResponse.json(
@@ -56,10 +59,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: validation.error }, { status: 400 });
     }
 
-    const { type, theme, gameMode, extras } = validation.cleaned;
+    const { type, theme, extras } = validation.cleaned;
     const expectedCharsPerLine = type === "poem7" ? 7 : 5;
 
-    // ── 积分检查 ──
     const creditsCheck = await checkAndDeduct(db, auth.openid, "poem");
     if (!creditsCheck.ok) {
       return NextResponse.json(
@@ -72,35 +74,54 @@ export async function POST(req: NextRequest) {
         { status: 403 },
       );
     }
+    chargedOpenid = auth.openid;
 
-    const prompt = createPoemPrompt(type, theme, gameMode, extras);
-    const raw = await generateBlessing(prompt);
-
+    // Stage one always produces the first two lines. Reviewing a completed
+    // poem is a separate responsibility and must not change this contract.
+    const raw = await generateBlessing(createPoemPrompt(type, theme, false, extras));
     const lines = parsePoemResponse(raw, expectedCharsPerLine);
     if (!lines) {
+      await refundUsage(db, auth.openid, "poem");
+      chargedOpenid = null;
       return NextResponse.json(
         { error: "古诗生成格式不正确，请重试" },
         { status: 500 },
       );
     }
 
+    // A draft is the server-side source of truth for the collaborative poem.
+    // Completing it later is restricted to this owner and this record.
+    const record = await poemDb.insertPoemRecord({
+      user_id: auth.openid,
+      type,
+      theme,
+      gameMode: true,
+      extras: extras ?? null,
+      aiLines: lines.join("\n"),
+    });
+
+    chargedOpenid = null;
     return NextResponse.json({
       success: true,
       lines,
       type,
       theme,
+      recordId: Number((record as unknown as { id: number }).id),
     });
   } catch (error) {
-    console.error("生成古诗失败:", error);
+    if (chargedOpenid) {
+      try {
+        await refundUsage(db, chargedOpenid, "poem");
+      } catch (refundError) {
+        console.error("古诗生成退款失败:", refundError);
+      }
+    }
 
+    console.error("生成古诗失败:", error);
     let errorMessage = "生成失败，请重试";
     if (axios.isAxiosError(error)) {
-      if (error.response?.status === 429) {
-        errorMessage = "请求太频繁，请稍后再试";
-      } else if (
-        error.response?.status === 401 ||
-        error.response?.status === 403
-      ) {
+      if (error.response?.status === 429) errorMessage = "请求太频繁，请稍后再试";
+      else if (error.response?.status === 401 || error.response?.status === 403) {
         errorMessage = "服务暂时不可用";
       }
     } else if (error instanceof Error && error.message.includes("429")) {

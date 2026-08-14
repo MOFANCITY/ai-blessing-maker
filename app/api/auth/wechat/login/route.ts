@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { WechatLoginRequest, UserLoginResponse } from "@/lib/types/auth";
 import { db, userDb } from "@/lib/db";
-import { verifyToken, generateToken } from "@/lib/auth";
+import { getAuthToken, resolveAuth } from "@/lib/api-auth";
+import { generateToken } from "@/lib/auth";
 import { initNewUser } from "@/lib/credits";
 import * as crypto from "crypto";
 
@@ -127,18 +128,13 @@ export async function GET(
   request: NextRequest,
 ): Promise<NextResponse<{ user: unknown } | { error: string }>> {
   try {
-    // 从 Cookie 获取 token
-    const token = request.cookies.get("auth_token")?.value;
-
-    if (!token) {
-      return NextResponse.json({ error: "未登录" }, { status: 401 });
-    }
-
-    // 验证 token
-    const decoded = verifyToken(token);
+    const decoded = resolveAuth(request);
 
     if (!decoded) {
-      return NextResponse.json({ error: "登录已过期" }, { status: 401 });
+      return NextResponse.json(
+        { error: getAuthToken(request) ? "登录已过期" : "未登录" },
+        { status: 401 },
+      );
     }
 
     // 获取用户信息
